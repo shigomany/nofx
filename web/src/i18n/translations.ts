@@ -1131,7 +1131,7 @@ export const translations = {
       testingConnection: 'Testing...',
       codexTitle: 'OpenAI Codex subscription',
       codexDescription:
-        'Connect with the official device authorization page. NOFX never receives or stores your account credentials.',
+        'Authorize on the official OpenAI device page. Your OpenAI password is never sent to NOFX; the saved session stays in an isolated Codex container.',
       codexConnect: 'Connect Codex',
       codexReconnect: 'Reconnect Codex',
       codexWaiting: 'Waiting for authorization…',
@@ -2320,7 +2320,7 @@ export const translations = {
       testingConnection: '测试中...',
       codexTitle: 'OpenAI Codex 订阅',
       codexDescription:
-        '通过官方设备授权页面连接。NOFX 不会接收或存储您的账户凭据。',
+        '通过 OpenAI 官方设备授权页面连接。您的 OpenAI 密码不会发送到 NOFX，授权会话仅保存在独立的 Codex 容器中。',
       codexConnect: '连接 Codex',
       codexReconnect: '重新连接 Codex',
       codexWaiting: '等待授权…',
@@ -3463,7 +3463,7 @@ export const translations = {
       testingConnection: 'Menguji...',
       codexTitle: 'Langganan OpenAI Codex',
       codexDescription:
-        'Hubungkan melalui halaman otorisasi perangkat resmi. NOFX tidak menerima atau menyimpan kredensial akun Anda.',
+        'Hubungkan di halaman otorisasi perangkat resmi OpenAI. Kata sandi OpenAI Anda tidak dikirim ke NOFX; sesi tersimpan hanya di container Codex yang terisolasi.',
       codexConnect: 'Hubungkan Codex',
       codexReconnect: 'Hubungkan ulang Codex',
       codexWaiting: 'Menunggu otorisasi…',
