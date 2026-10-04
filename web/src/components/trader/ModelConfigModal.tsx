@@ -295,113 +295,46 @@ function ModelSelectionStep({
   onSelectModel: (modelId: string) => void
   language: Language
 }) {
-  return (
-    <div className="space-y-4">
-      <div className="text-sm font-semibold" style={{ color: '#1A1813' }}>
-        {t('modelConfig.chooseProvider', language)}
-      </div>
+  const providerOrder: Record<string, number> = { codex: 0, zai: 1, claw402: 2 }
+  const visibleModels = availableModels
+    .filter((model) => !model.provider?.startsWith('blockrun'))
+    .sort(
+      (a, b) =>
+        (providerOrder[a.provider] ?? 3) - (providerOrder[b.provider] ?? 3)
+    )
 
-      {/* Claw402 Featured Card */}
-      {availableModels.some((m) => m.provider === 'claw402') && (
-        <button
-          type="button"
-          onClick={() => {
-            const claw = availableModels.find((m) => m.provider === 'claw402')
-            if (claw) onSelectModel(claw.id)
-          }}
-          className="w-full p-5 rounded-xl text-left transition-all hover:scale-[1.01]"
+  return (
+    <div className="space-y-5">
+      <div>
+        <div className="text-sm font-semibold text-nofx-text">
+          {t('modelConfig.chooseProvider', language)}
+        </div>
+        <p
+          className="mt-1.5 text-xs leading-5"
           style={{
-            background: 'rgba(224, 72, 59, 0.10)',
-            border: '1.5px solid rgba(224, 72, 59, 0.4)',
+            color: '#615B50',
+            fontFamily: 'Inter, system-ui, sans-serif',
           }}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden">
-                <img
-                  src="/icons/claw402.png"
-                  alt="Claw402"
-                  width={40}
-                  height={40}
-                />
-              </div>
-              <div>
-                <div
-                  className="font-bold text-base"
-                  style={{ color: '#1A1813' }}
-                >
-                  Claw402
-                  <a
-                    href="https://claw402.ai"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="ml-1.5 text-[10px] font-normal px-1.5 py-0.5 rounded"
-                    style={{
-                      color: '#E0483B',
-                      background: 'rgba(224, 72, 59, 0.1)',
-                    }}
-                  >
-                    ↗ claw402.ai
-                  </a>
-                </div>
-                <div className="text-xs mt-0.5" style={{ color: '#8A8478' }}>
-                  {t('modelConfig.payPerCall', language)}
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {configuredIds.has(
-                availableModels.find((m) => m.provider === 'claw402')?.id || ''
-              ) && (
-                <div
-                  className="w-2 h-2 rounded-full"
-                  style={{ background: '#2E8B57' }}
-                />
-              )}
-              <div
-                className="px-3 py-1.5 rounded-full text-xs font-bold"
-                style={{
-                  background: '#E0483B',
-                  color: '#fff',
-                }}
-              >
-                {'🔥 ' + t('modelConfig.recommended', language)}
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 mt-3 ml-[52px]">
-            <span
-              className="text-[11px] px-2 py-0.5 rounded-full"
-              style={{
-                background: 'rgba(46, 139, 87, 0.1)',
-                color: '#2E8B57',
-                border: '1px solid rgba(46, 139, 87, 0.2)',
-              }}
-            >
-              GPT · Claude · DeepSeek · GLM
-            </span>
-          </div>
-        </button>
-      )}
-
-      <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-        {availableModels
-          .filter(
-            (m) =>
-              !m.provider?.startsWith('blockrun') && m.provider !== 'claw402'
-          )
-          .map((model) => (
-            <ModelCard
-              key={model.id}
-              model={model}
-              selected={selectedModelId === model.id}
-              onClick={() => onSelectModel(model.id)}
-              configured={configuredIds.has(model.id)}
-            />
-          ))}
+          {t('modelConfig.providerSelectionHint', language)}
+        </p>
       </div>
-      <div className="text-xs text-center pt-2" style={{ color: '#8A8478' }}>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {visibleModels.map((model) => (
+          <ModelCard
+            key={model.id}
+            model={model}
+            selected={selectedModelId === model.id}
+            onClick={() => onSelectModel(model.id)}
+            configured={configuredIds.has(model.id)}
+            language={language}
+          />
+        ))}
+      </div>
+      <div
+        className="text-[11px] text-center pt-1"
+        style={{ color: '#615B50', fontFamily: 'Inter, system-ui, sans-serif' }}
+      >
         {t('modelConfig.modelsConfigured', language)}
       </div>
     </div>
