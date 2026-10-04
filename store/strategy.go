@@ -76,6 +76,12 @@ func isLegacyAutopilotPositionRatio(value float64) bool {
 // ClampLimits enforces product-level limits on strategy config to prevent token overflow.
 func (c *StrategyConfig) ClampLimits() {
 	c.NormalizeProductSchema()
+	if c.RuleBased != nil && IsSupportedRuleBasedPreset(c.RuleBased.Preset) {
+		publishConfig := c.PublishConfig
+		*c = GetRuleBasedStrategyConfig(c.RuleBased.Preset)
+		c.PublishConfig = publishConfig
+		return
+	}
 
 	// Clamp coin source limits
 	if c.CoinSource.AI500Limit > MaxCandidateCoins {
@@ -559,7 +565,7 @@ func normalizeStrategyConfigPatch(patch map[string]any) {
 		}
 	}
 
-	aiKeys := []string{"coin_source", "indicators", "risk_control", "prompt_sections", "custom_prompt"}
+	aiKeys := []string{"coin_source", "indicators", "risk_control", "prompt_sections", "custom_prompt", "rule_based"}
 	for _, key := range aiKeys {
 		value, ok := patch[key]
 		if !ok {
@@ -668,11 +674,12 @@ type StrategyConfig struct {
 	Language string `json:"language,omitempty"`
 	// AI trading configuration fields are kept on the Go struct for engine
 	// compatibility, but JSON persistence nests them under ai_config.
-	CoinSource     CoinSourceConfig     `json:"-"`
-	Indicators     IndicatorConfig      `json:"-"`
-	CustomPrompt   string               `json:"-"`
-	RiskControl    RiskControlConfig    `json:"-"`
-	PromptSections PromptSectionsConfig `json:"-"`
+	CoinSource     CoinSourceConfig         `json:"-"`
+	Indicators     IndicatorConfig          `json:"-"`
+	CustomPrompt   string                   `json:"-"`
+	RiskControl    RiskControlConfig        `json:"-"`
+	PromptSections PromptSectionsConfig     `json:"-"`
+	RuleBased      *RuleBasedStrategyConfig `json:"-"`
 
 	// Grid trading configuration (only used when StrategyType == "grid_trading")
 	GridConfig *GridStrategyConfig `json:"grid_config,omitempty"`
@@ -685,11 +692,12 @@ type StrategyConfig struct {
 
 // AIStrategyConfig contains fields only used by AI trading strategies.
 type AIStrategyConfig struct {
-	CoinSource     CoinSourceConfig     `json:"coin_source"`
-	Indicators     IndicatorConfig      `json:"indicators"`
-	CustomPrompt   string               `json:"custom_prompt,omitempty"`
-	RiskControl    RiskControlConfig    `json:"risk_control"`
-	PromptSections PromptSectionsConfig `json:"prompt_sections,omitempty"`
+	CoinSource     CoinSourceConfig         `json:"coin_source"`
+	Indicators     IndicatorConfig          `json:"indicators"`
+	CustomPrompt   string                   `json:"custom_prompt,omitempty"`
+	RiskControl    RiskControlConfig        `json:"risk_control"`
+	PromptSections PromptSectionsConfig     `json:"prompt_sections,omitempty"`
+	RuleBased      *RuleBasedStrategyConfig `json:"rule_based,omitempty"`
 }
 
 // PublishStrategyConfig contains settings shared by all strategy types.
@@ -727,6 +735,7 @@ func (c StrategyConfig) MarshalJSON() ([]byte, error) {
 			CustomPrompt:   c.CustomPrompt,
 			RiskControl:    c.RiskControl,
 			PromptSections: c.PromptSections,
+			RuleBased:      c.RuleBased,
 		}
 	}
 
@@ -743,11 +752,12 @@ func (c *StrategyConfig) UnmarshalJSON(data []byte) error {
 		GridConfig    *GridStrategyConfig    `json:"grid_config"`
 		PublishConfig *PublishStrategyConfig `json:"publish_config"`
 
-		CoinSource     *CoinSourceConfig     `json:"coin_source"`
-		Indicators     *IndicatorConfig      `json:"indicators"`
-		CustomPrompt   *string               `json:"custom_prompt"`
-		RiskControl    *RiskControlConfig    `json:"risk_control"`
-		PromptSections *PromptSectionsConfig `json:"prompt_sections"`
+		CoinSource     *CoinSourceConfig        `json:"coin_source"`
+		Indicators     *IndicatorConfig         `json:"indicators"`
+		CustomPrompt   *string                  `json:"custom_prompt"`
+		RiskControl    *RiskControlConfig       `json:"risk_control"`
+		PromptSections *PromptSectionsConfig    `json:"prompt_sections"`
+		RuleBased      *RuleBasedStrategyConfig `json:"rule_based"`
 	}
 
 	var raw rawStrategyConfig
@@ -766,6 +776,7 @@ func (c *StrategyConfig) UnmarshalJSON(data []byte) error {
 		c.CustomPrompt = raw.AIConfig.CustomPrompt
 		c.RiskControl = raw.AIConfig.RiskControl
 		c.PromptSections = raw.AIConfig.PromptSections
+		c.RuleBased = raw.AIConfig.RuleBased
 	} else {
 		if raw.CoinSource != nil {
 			c.CoinSource = *raw.CoinSource
@@ -782,6 +793,7 @@ func (c *StrategyConfig) UnmarshalJSON(data []byte) error {
 		if raw.PromptSections != nil {
 			c.PromptSections = *raw.PromptSections
 		}
+		c.RuleBased = raw.RuleBased
 	}
 
 	if strings.TrimSpace(c.StrategyType) == "" && c.GridConfig != nil {

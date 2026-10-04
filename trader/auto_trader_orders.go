@@ -25,6 +25,9 @@ const (
 
 // executeDecisionWithRecord executes AI decision and records detailed information
 func (at *AutoTrader) executeDecisionWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
+	if at.usesRuleBasedStrategy() && decision.Action == "open_short" {
+		return fmt.Errorf("indicator presets are long only")
+	}
 	switch decision.Action {
 	case "open_long":
 		return at.executeOpenLongWithRecord(decision, actionRecord)
@@ -71,7 +74,14 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	}
 
 	// Get current price and reject invalid protection before opening exposure.
-	marketData, err := market.GetWithExchange(decision.Symbol, at.exchange)
+	var marketData *market.Data
+	if at.usesRuleBasedStrategy() {
+		price, priceErr := market.GetHyperliquidPrice(decision.Symbol)
+		err = priceErr
+		marketData = &market.Data{CurrentPrice: price}
+	} else {
+		marketData, err = market.GetWithExchange(decision.Symbol, at.exchange)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to get market data for %s: %w", decision.Symbol, err)
 	}
@@ -100,6 +110,17 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 	}
 
 	at.applyAutopilotFullSizeOpen(decision, equity)
+	if at.usesRuleBasedStrategy() {
+		marginUsed, ok := balance["totalMarginUsed"].(float64)
+		if !ok {
+			return fmt.Errorf("native indicator order requires authoritative margin usage")
+		}
+		if err := at.prepareRuleBasedOpen(decision, equity, availableBalance, marginUsed, marketData.CurrentPrice, time.Now().UTC()); err != nil {
+			return err
+		}
+		actionRecord.StopLoss = decision.StopLoss
+		actionRecord.TakeProfit = decision.TakeProfit
+	}
 
 	// [CODE ENFORCED] Position Value Ratio Check: position_value <= equity × ratio
 	adjustedPositionSize, wasCapped := at.enforcePositionValueRatio(decision.PositionSizeUSD, equity, decision.Symbol)

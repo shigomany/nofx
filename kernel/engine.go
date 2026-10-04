@@ -93,6 +93,7 @@ type RecentOrder struct {
 
 // Context trading context (complete information passed to AI)
 type Context struct {
+	Exchange           string                             `json:"-"`
 	CurrentTime        string                             `json:"current_time"`
 	RuntimeMinutes     int                                `json:"runtime_minutes"`
 	CallCount          int                                `json:"call_count"`
@@ -126,6 +127,10 @@ type Decision struct {
 	PositionSizeUSD float64 `json:"position_size_usd,omitempty"`
 	StopLoss        float64 `json:"stop_loss,omitempty"`
 	TakeProfit      float64 `json:"take_profit,omitempty"`
+	// Native indicator decisions carry the closed signal candle and ATR used
+	// for execution-time risk checks. AI strategies do not use these fields.
+	RuleSignalTimeMS int64   `json:"rule_signal_time_ms,omitempty"`
+	RuleATR14        float64 `json:"rule_atr14,omitempty"`
 
 	// Grid trading parameters
 	Price      float64 `json:"price,omitempty"`       // Limit order price (for grid)
@@ -195,6 +200,10 @@ type StrategyEngine struct {
 // NewStrategyEngine creates strategy execution engine.
 // claw402WalletKey is optional — if provided, nofxos data requests are routed through claw402.
 func NewStrategyEngine(config *store.StrategyConfig, claw402WalletKey ...string) *StrategyEngine {
+	if config.RuleBased != nil {
+		config.ClampLimits()
+		return &StrategyEngine{config: config}
+	}
 	// Create NofxOS client with API key from config
 	apiKey := config.Indicators.NofxOSAPIKey
 	if apiKey == "" {
@@ -289,6 +298,9 @@ func (e *StrategyEngine) GetConfig() *store.StrategyConfig {
 
 // GetCandidateCoins gets candidate coins based on strategy configuration
 func (e *StrategyEngine) GetCandidateCoins() ([]CandidateCoin, error) {
+	if e.config.RuleBased != nil && !store.IsSupportedRuleBasedPreset(e.config.RuleBased.Preset) {
+		return nil, fmt.Errorf("unsupported indicator preset %q", e.config.RuleBased.Preset)
+	}
 	var candidates []CandidateCoin
 	symbolSources := make(map[string][]string)
 

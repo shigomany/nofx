@@ -54,6 +54,9 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 	// Clamp strategy limits to prevent token overflow
 	engineConfig := engine.GetConfig()
 	engineConfig.ClampLimits()
+	if engineConfig.RuleBased != nil {
+		return getRuleBasedDecision(ctx, engineConfig, time.Now().UTC())
+	}
 
 	// Token estimation check — block if exceeding the specific model's context limit
 	estimate := engineConfig.EstimateTokens()

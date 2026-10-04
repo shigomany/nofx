@@ -160,8 +160,32 @@ func (s *Server) runLaunchPreflight(
 	strategy *store.Strategy,
 	strategyRequired bool,
 ) LaunchPreflightResult {
-	checks := []LaunchCheck{checkLaunchAIModel(model)}
-	checks = append(checks, checkLaunchAIWallet(model)...)
+	checks := []LaunchCheck{}
+	nativeRules := false
+	if strategy != nil {
+		cfg, err := strategy.ParseConfig()
+		if err != nil || (cfg.RuleBased != nil && !store.IsSupportedRuleBasedPreset(cfg.RuleBased.Preset)) {
+			checks = append(checks, LaunchCheck{ID: "strategy_config", Status: launchCheckStatusFailed, Message: "Invalid or unsupported strategy configuration"})
+		} else {
+			nativeRules = cfg.RuleBased != nil
+		}
+	}
+	if nativeRules {
+		if model == nil || !model.Enabled {
+			checks = append(checks, checkLaunchAIModel(model))
+		} else {
+			checks = append(checks, LaunchCheck{ID: launchCheckAIModel, Status: launchCheckStatusOK, Message: "Model record is enabled; native strategy does not use its credentials"})
+		}
+		for _, id := range []string{launchCheckAIWallet, launchCheckAIWalletFunds} {
+			checks = append(checks, LaunchCheck{ID: id, Status: launchCheckStatusSkipped, Message: "Native indicator strategy does not call AI or require an AI fee wallet"})
+		}
+		if exchange == nil || exchange.ExchangeType != "hyperliquid" || exchange.Testnet {
+			checks = append(checks, LaunchCheck{ID: "indicator_exchange", Status: launchCheckStatusFailed, Message: "Native indicator presets support Hyperliquid mainnet only"})
+		}
+	} else {
+		checks = append(checks, checkLaunchAIModel(model))
+		checks = append(checks, checkLaunchAIWallet(model)...)
+	}
 	checks = append(checks, checkLaunchStrategy(strategy, strategyRequired))
 	checks = append(checks, s.checkLaunchExchange(userID, exchange)...)
 
@@ -176,10 +200,17 @@ func (s *Server) runLaunchPreflight(
 	return LaunchPreflightResult{
 		Ready:          ready,
 		Checks:         checks,
-		MinAIFeeUSDC:   MinAIFeeUSDC,
+		MinAIFeeUSDC:   nativeAIFeeMinimum(nativeRules),
 		MinTradingUSDC: MinTradingUSDC,
 		CheckedAt:      time.Now().UTC(),
 	}
+}
+
+func nativeAIFeeMinimum(nativeRules bool) float64 {
+	if nativeRules {
+		return 0
+	}
+	return MinAIFeeUSDC
 }
 
 func checkLaunchAIModel(model *store.AIModel) LaunchCheck {

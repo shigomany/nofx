@@ -85,6 +85,14 @@ func (at *AutoTrader) tradeThrottleReason(decision kernel.Decision, ctx *kernel.
 	if ctx == nil {
 		return ""
 	}
+	if at.usesRuleBasedStrategy() {
+		if isCloseAction(decision.Action) {
+			return "" // Fixed closed-candle trend exits are not AI noise exits.
+		}
+		if reason := at.ruleBasedThrottleReason(decision, time.Now().UTC()); reason != "" {
+			return reason
+		}
+	}
 
 	switch {
 	case isOpenAction(decision.Action):

@@ -570,6 +570,26 @@ func (s *Server) handleStrategyTestRun(c *gin.Context) {
 		req.PromptVariant = "balanced"
 	}
 
+	if req.Config.RuleBased != nil {
+		// Native strategy preview is a dry run with an illustrative $45 account.
+		// It never resolves credentials, calls an AI provider, or places orders.
+		engine := kernel.NewStrategyEngine(&req.Config)
+		decision, err := kernel.GetFullDecisionWithStrategy(&kernel.Context{
+			Exchange: "hyperliquid",
+			Account:  kernel.AccountInfo{TotalEquity: 45, AvailableBalance: 45},
+		}, nil, engine, "")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"system_prompt": decision.SystemPrompt, "user_prompt": decision.UserPrompt,
+			"ai_response": decision.RawResponse, "decisions": decision.Decisions,
+			"note": "Native indicator dry run; illustrative $45 equity; no orders or AI requests",
+		})
+		return
+	}
+
 	claw402WalletKey, err := s.resolveStrategyDataWalletKey(userID, req.AIModelID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{

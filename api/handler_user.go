@@ -229,13 +229,13 @@ func (s *Server) createDefaultStrategies(userID string, lang string) error {
 	}
 	locales := map[string]strategyLocale{
 		"zh": {
-			defaultStrategy: strategyI18n{"NOFX Claw402 Auto Strategy", "The only built-in strategy: read the Claw402.ai direction board each cycle, load direction history and cost/liquidation heatmaps, then manage positions by the live board."},
+			defaultStrategy: strategyI18n{"NOFX Claw402 Auto Strategy", "Read the Claw402.ai direction board each cycle, load direction history and cost/liquidation heatmaps, then manage positions by the live board."},
 		},
 		"en": {
-			defaultStrategy: strategyI18n{"NOFX Claw402 Auto Strategy", "The only built-in strategy: read the Claw402.ai direction board each cycle, load direction history and cost/liquidation heatmaps, then manage positions by the live board."},
+			defaultStrategy: strategyI18n{"NOFX Claw402 Auto Strategy", "Read the Claw402.ai direction board each cycle, load direction history and cost/liquidation heatmaps, then manage positions by the live board."},
 		},
 		"id": {
-			defaultStrategy: strategyI18n{"Strategi Otomatis NOFX Claw402", "Satu strategi bawaan: membaca papan arah Claw402.ai setiap siklus, memuat riwayat arah dan heatmap biaya/likuidasi, lalu mengelola posisi mengikuti papan langsung."},
+			defaultStrategy: strategyI18n{"Strategi Otomatis NOFX Claw402", "Membaca papan arah Claw402.ai setiap siklus, memuat riwayat arah dan heatmap biaya/likuidasi, lalu mengelola posisi mengikuti papan langsung."},
 		},
 	}
 	locale, ok := locales[lang]
@@ -288,6 +288,22 @@ func (s *Server) createDefaultStrategies(userID string, lang string) error {
 			isActive:    true,
 			applyConfig: func(c *store.StrategyConfig) {
 				setClaw402Strategy(c)
+			},
+		},
+		{
+			name:        "NOFX BTC/ETH Trend",
+			description: "Experimental deterministic EMA trend adaptation inspired by Veles. No validated profit; no DCA or martingale.",
+			isActive:    false,
+			applyConfig: func(c *store.StrategyConfig) {
+				*c = store.GetRuleBasedStrategyConfig(store.RuleBasedPresetTrendFollowing)
+			},
+		},
+		{
+			name:        "NOFX RSI Pullback",
+			description: "Experimental deterministic RSI pullback adaptation inspired by Veles. No validated profit; no DCA or martingale.",
+			isActive:    false,
+			applyConfig: func(c *store.StrategyConfig) {
+				*c = store.GetRuleBasedStrategyConfig(store.RuleBasedPresetRSIPullback)
 			},
 		},
 	}

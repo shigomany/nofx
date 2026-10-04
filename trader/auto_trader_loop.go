@@ -37,7 +37,7 @@ func (at *AutoTrader) runCycle() error {
 	}
 
 	// Check USDC balance periodically for claw402 users (every 10 cycles)
-	if at.callCount%10 == 0 && store.IsClaw402Config(at.config.AIModel) {
+	if at.callCount%10 == 0 && !at.usesRuleBasedStrategy() && store.IsClaw402Config(at.config.AIModel) {
 		at.checkClaw402Balance()
 	}
 
@@ -109,7 +109,11 @@ func (at *AutoTrader) runCycle() error {
 		ctx.Account.TotalEquity, ctx.Account.AvailableBalance, ctx.Account.PositionCount)
 
 	// 5. Use strategy engine to call AI for decision
-	at.logInfof("🤖 Requesting AI analysis and decision... [Strategy Engine]")
+	if at.usesRuleBasedStrategy() {
+		at.logInfof("📐 Evaluating native indicator rules (no AI request)")
+	} else {
+		at.logInfof("🤖 Requesting AI analysis and decision... [Strategy Engine]")
+	}
 	aiDecision, err := kernel.GetFullDecisionWithStrategy(ctx, at.mcpClient, at.strategyEngine, "balanced")
 
 	if aiDecision != nil && aiDecision.AIRequestDurationMs > 0 {
@@ -137,7 +141,7 @@ func (at *AutoTrader) runCycle() error {
 	// the provider id (e.g. "claw402") and would fall back to the default price.
 	// Prefer the gateway-reported settled amount (upto scheme) over the flat
 	// catalog estimate when the client exposes it.
-	if aiDecision != nil && at.store != nil {
+	if aiDecision != nil && at.store != nil && !at.usesRuleBasedStrategy() {
 		chargeModel := at.config.CustomModelName
 		if chargeModel == "" {
 			chargeModel = at.aiModel
@@ -618,6 +622,7 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 
 	// 6. Build context
 	ctx := &kernel.Context{
+		Exchange:        at.exchange,
 		CurrentTime:     time.Now().UTC().Format("2006-01-02 15:04:05 UTC"),
 		RuntimeMinutes:  int(time.Since(at.startTime).Minutes()),
 		CallCount:       at.callCount,

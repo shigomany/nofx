@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { DeepVoidBackground } from '../components/common/DeepVoidBackground'
+import { IndicatorStrategyPanel } from '../components/strategy/IndicatorStrategyPanel'
 import { api } from '../lib/api'
 import { confirmToast, notify } from '../lib/notify'
 import type {
@@ -171,21 +172,22 @@ function defaultCoinSource(
     10
   )
   return {
-    source_type: 'vergex_signal',
+    ...source,
+    source_type: source?.source_type || 'vergex_signal',
     static_coins: staticCoins,
-    excluded_coins: [],
-    use_ai500: false,
-    ai500_limit: 0,
-    use_oi_top: false,
-    oi_top_limit: 0,
-    use_oi_low: false,
-    oi_low_limit: 0,
-    use_hyper_all: false,
-    use_hyper_main: false,
-    hyper_main_limit: 0,
+    excluded_coins: source?.excluded_coins || [],
+    use_ai500: source?.use_ai500 ?? false,
+    ai500_limit: source?.ai500_limit ?? 0,
+    use_oi_top: source?.use_oi_top ?? false,
+    oi_top_limit: source?.oi_top_limit ?? 0,
+    use_oi_low: source?.use_oi_low ?? false,
+    oi_low_limit: source?.oi_low_limit ?? 0,
+    use_hyper_all: source?.use_hyper_all ?? false,
+    use_hyper_main: source?.use_hyper_main ?? false,
+    hyper_main_limit: source?.hyper_main_limit ?? 0,
     hyper_rank_category: source?.hyper_rank_category || 'all',
-    hyper_rank_direction: 'gainers',
-    hyper_rank_limit: 0,
+    hyper_rank_direction: source?.hyper_rank_direction || 'gainers',
+    hyper_rank_limit: source?.hyper_rank_limit ?? 0,
     vergex_limit: vergexLimit,
     vergex_market_type: source?.vergex_market_type || 'all',
     vergex_chain: source?.vergex_chain || 'hyperliquid',
@@ -203,59 +205,63 @@ function defaultIndicators(
   }
 
   return {
+    ...indicators,
     klines: {
+      ...klines,
       primary_timeframe: klines.primary_timeframe || '15m',
-      primary_count: klines.primary_count || 30,
-      longer_timeframe: '',
-      longer_count: 0,
-      enable_multi_timeframe: false,
-      selected_timeframes: [klines.primary_timeframe || '15m'],
+      primary_count: klines.primary_count ?? 30,
+      longer_timeframe: klines.longer_timeframe,
+      longer_count: klines.longer_count,
+      enable_multi_timeframe: klines.enable_multi_timeframe ?? false,
+      selected_timeframes: klines.selected_timeframes || [klines.primary_timeframe || '15m'],
     },
-    enable_raw_klines: true,
-    enable_ema: false,
-    enable_macd: false,
-    enable_rsi: false,
-    enable_atr: false,
-    enable_boll: false,
-    enable_volume: false,
-    enable_oi: false,
-    enable_funding_rate: false,
-    nofxos_api_key: '',
-    enable_quant_data: false,
-    enable_quant_oi: false,
-    enable_quant_netflow: false,
-    enable_oi_ranking: false,
-    enable_netflow_ranking: false,
-    enable_price_ranking: false,
+    enable_raw_klines: indicators?.enable_raw_klines ?? true,
+    enable_ema: indicators?.enable_ema ?? false,
+    enable_macd: indicators?.enable_macd ?? false,
+    enable_rsi: indicators?.enable_rsi ?? false,
+    enable_atr: indicators?.enable_atr ?? false,
+    enable_boll: indicators?.enable_boll ?? false,
+    enable_volume: indicators?.enable_volume ?? false,
+    enable_oi: indicators?.enable_oi ?? false,
+    enable_funding_rate: indicators?.enable_funding_rate ?? false,
+    nofxos_api_key: indicators?.nofxos_api_key || '',
+    enable_quant_data: indicators?.enable_quant_data ?? false,
+    enable_quant_oi: indicators?.enable_quant_oi ?? false,
+    enable_quant_netflow: indicators?.enable_quant_netflow ?? false,
+    enable_oi_ranking: indicators?.enable_oi_ranking ?? false,
+    enable_netflow_ranking: indicators?.enable_netflow_ranking ?? false,
+    enable_price_ranking: indicators?.enable_price_ranking ?? false,
   }
 }
 
 function defaultRisk(risk?: Partial<RiskControlConfig>): RiskControlConfig {
   const leverage =
-    risk?.altcoin_max_leverage || risk?.btc_eth_max_leverage || 10
+    risk?.altcoin_max_leverage ?? risk?.btc_eth_max_leverage ?? 10
   return {
-    max_positions: risk?.max_positions || 8,
+    max_positions: risk?.max_positions ?? 8,
     btc_eth_max_leverage: leverage,
     altcoin_max_leverage: leverage,
     btc_eth_max_position_value_ratio:
-      risk?.btc_eth_max_position_value_ratio || 5,
+      risk?.btc_eth_max_position_value_ratio ?? 5,
     altcoin_max_position_value_ratio:
-      risk?.altcoin_max_position_value_ratio || 5,
-    max_margin_usage: risk?.max_margin_usage || 1.0,
-    min_position_size: risk?.min_position_size || 12,
-    min_risk_reward_ratio: risk?.min_risk_reward_ratio || 3,
-    min_confidence: risk?.min_confidence || 78,
+      risk?.altcoin_max_position_value_ratio ?? 5,
+    max_margin_usage: risk?.max_margin_usage ?? 1.0,
+    min_position_size: risk?.min_position_size ?? 12,
+    min_risk_reward_ratio: risk?.min_risk_reward_ratio ?? 3,
+    min_confidence: risk?.min_confidence ?? 78,
   }
 }
 
-function simplifyConfig(
+export function simplifyConfig(
   config: StrategyConfig | null | undefined
 ): StrategyConfig {
   const ai = config ? getAIConfig(config) : null
   return {
+    ...config,
     strategy_type: 'ai_trading',
     language: config?.language || 'zh',
     ai_config: {
+      ...ai,
       coin_source: defaultCoinSource(ai?.coin_source),
       indicators: defaultIndicators(ai?.indicators),
       risk_control: defaultRisk(ai?.risk_control),
@@ -821,6 +827,7 @@ export function StrategyStudioPage() {
   const coinSource = aiConfig?.coin_source
   const indicators = aiConfig?.indicators
   const risk = aiConfig?.risk_control
+  const ruleBased = aiConfig?.rule_based
   const selectedSymbols = coinSource?.static_coins || []
   const scope = 'all' as Scope
   const activeProfile = profileFromRisk(risk)
@@ -1390,17 +1397,25 @@ export function StrategyStudioPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-semibold text-nofx-text">
-              {text(language, 'NOFX Autopilot', 'NOFX Autopilot')}
+              {ruleBased
+                ? selectedStrategy?.name || 'Indicator strategy'
+                : text(language, 'NOFX Autopilot', 'NOFX Autopilot')}
             </h1>
             <p className="mt-1 text-sm text-nofx-text-muted">
-              {text(
-                language,
-                'Autonomous market selection powered by the live Claw402.ai direction board.',
-                'Autonomous market selection powered by the live Claw402.ai direction board.'
-              )}
+              {ruleBased
+                ? text(
+                    language,
+                    'Deterministic indicator rules for BTC and ETH. No AI request is used for trading decisions.',
+                    'Deterministic indicator rules for BTC and ETH. No AI request is used for trading decisions.'
+                  )
+                : text(
+                    language,
+                    'Autonomous market selection powered by the live Claw402.ai direction board.',
+                    'Autonomous market selection powered by the live Claw402.ai direction board.'
+                  )}
             </p>
           </div>
-          <button
+          {!ruleBased ? <button
             type="button"
             onClick={startUnifiedClaw402Agent}
             disabled={saving || !selectedStrategy}
@@ -1412,12 +1427,12 @@ export function StrategyStudioPage() {
               <Bot className="h-4 w-4" />
             )}
             {text(language, 'Launch Autopilot', 'Launch Autopilot')}
-          </button>
+          </button> : null}
         </div>
       </div>
 
-      <div className="grid min-h-[calc(100vh-137px)] grid-cols-1">
-        <aside className="hidden border-r border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper p-3">
+      <div className="grid min-h-[calc(100vh-137px)] grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="border-r border-[rgba(26,24,19,0.14)] bg-nofx-bg-deeper p-3">
           <div className="mb-2 px-2 text-xs font-medium uppercase tracking-wide text-nofx-text-muted">
             {text(language, 'My strategies', 'My strategies')}
           </div>
@@ -1460,6 +1475,24 @@ export function StrategyStudioPage() {
         <main className="overflow-y-auto p-5">
           {selectedStrategy && aiConfig && coinSource && indicators && risk ? (
             <div className="mx-auto max-w-7xl space-y-4">
+              {ruleBased ? (
+                <IndicatorStrategyPanel
+                  strategy={selectedStrategy}
+                  config={aiConfig}
+                  language={language}
+                  saving={saving}
+                  hasChanges={hasChanges}
+                  onNameChange={(name) => {
+                    setSelectedStrategy({ ...selectedStrategy, name })
+                    setHasChanges(true)
+                  }}
+                  onDescriptionChange={(description) => {
+                    setSelectedStrategy({ ...selectedStrategy, description })
+                    setHasChanges(true)
+                  }}
+                  onSave={() => saveStrategy()}
+                />
+              ) : <>
               <section className="hidden rounded-lg border border-[rgba(26,24,19,0.14)] bg-nofx-bg-lighter p-4">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
@@ -2137,6 +2170,7 @@ export function StrategyStudioPage() {
                   />
                 </div>
               </details>
+              </>}
             </div>
           ) : (
             <div className="flex h-full items-center justify-center">

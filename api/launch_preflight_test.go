@@ -257,6 +257,10 @@ func TestRunLaunchPreflightAggregatesReadiness(t *testing.T) {
 	})
 	model := &store.AIModel{Name: "Claw402", Provider: "claw402", Enabled: true, APIKey: crypto.EncryptedString(testClaw402Key)}
 	strategy := &store.Strategy{ID: "strat-1", Name: "Autopilot"}
+	cfg := store.GetDefaultStrategyConfig("en")
+	if err := strategy.SetConfig(&cfg); err != nil {
+		t.Fatal(err)
+	}
 
 	result := server.runLaunchPreflight("user-1", model, exchange, strategy, true)
 	if !result.Ready {

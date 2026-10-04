@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"nofx/kernel"
 	"nofx/logger"
 	"nofx/store"
 
@@ -370,21 +371,15 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 		), "trader.create.model_disabled", mapStringPairs("model_name", model.Name))
 		return
 	}
-	if model.APIKey == "" {
-		SafeBadRequestWithDetails(c, formatTraderCreationError(
-			fmt.Sprintf("AI model \"%s\" is missing an API Key or payment credentials", model.Name),
-			"Please go to \"Settings > Model Config\" to complete the model credentials, then create the bot again",
-		), "trader.create.model_missing_credentials", mapStringPairs("model_name", model.Name))
-		return
-	}
-
 	if req.StrategyID == "" {
 		SafeBadRequestWithDetails(c, formatTraderCreationError("You have not selected a trading strategy yet", "Please select a strategy first, then continue creating the bot"), "trader.create.strategy_required", nil)
 		return
 	}
 
+	nativeRules := false
 	if req.StrategyID != "" {
-		_, err = s.store.Strategy().Get(userID, req.StrategyID)
+		var selectedStrategy *store.Strategy
+		selectedStrategy, err = s.store.Strategy().Get(userID, req.StrategyID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				SafeBadRequestWithDetails(c, formatTraderCreationError("The strategy you selected does not exist or has been deleted", "Please select another available strategy, then continue creating the bot"), "trader.create.strategy_not_found", nil)
@@ -396,6 +391,19 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 			)
 			return
 		}
+		cfg, configErr := selectedStrategy.ParseConfig()
+		if configErr != nil || (cfg.RuleBased != nil && !store.IsSupportedRuleBasedPreset(cfg.RuleBased.Preset)) {
+			SafeBadRequest(c, "Invalid or unsupported strategy configuration")
+			return
+		}
+		nativeRules = cfg.RuleBased != nil
+	}
+	if !nativeRules && model.APIKey == "" {
+		SafeBadRequestWithDetails(c, formatTraderCreationError(
+			fmt.Sprintf("AI model \"%s\" is missing an API Key or payment credentials", model.Name),
+			"Please go to \"Settings > Model Config\" to complete the model credentials, then create the bot again",
+		), "trader.create.model_missing_credentials", mapStringPairs("model_name", model.Name))
+		return
 	}
 
 	// Generate trader ID (use short UUID prefix for readability)
@@ -424,6 +432,9 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 	}
 	if req.AltcoinLeverage > 0 {
 		altcoinLeverage = req.AltcoinLeverage
+	}
+	if nativeRules {
+		btcEthLeverage, altcoinLeverage = kernel.RuleLeverage, kernel.RuleLeverage
 	}
 
 	// Set system prompt template default value
@@ -462,6 +473,10 @@ func (s *Server) handleCreateTrader(c *gin.Context) {
 
 	if exchangeMsg, exchangeErrorKey, exchangeErrorParams := validateExchangeForTraderCreation(exchangeCfg); exchangeMsg != "" {
 		SafeBadRequestWithDetails(c, exchangeMsg, exchangeErrorKey, exchangeErrorParams)
+		return
+	}
+	if nativeRules && (exchangeCfg.ExchangeType != "hyperliquid" || exchangeCfg.Testnet) {
+		SafeBadRequest(c, "Native indicator presets support Hyperliquid mainnet only")
 		return
 	}
 

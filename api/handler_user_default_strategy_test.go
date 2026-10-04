@@ -7,7 +7,7 @@ import (
 	"nofx/store"
 )
 
-func TestCreateDefaultStrategiesUsesOneReadyToRunClaw402Preset(t *testing.T) {
+func TestCreateDefaultStrategiesUsesOneReadyToRunClaw402AndInactiveRulePresets(t *testing.T) {
 	st, err := store.New(t.TempDir() + "/nofx.db")
 	if err != nil {
 		t.Fatalf("store.New failed: %v", err)
@@ -24,8 +24,8 @@ func TestCreateDefaultStrategiesUsesOneReadyToRunClaw402Preset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List strategies failed: %v", err)
 	}
-	if len(strategies) != 1 {
-		t.Fatalf("expected 1 default strategy, got %d", len(strategies))
+	if len(strategies) != 3 {
+		t.Fatalf("expected 3 default strategies, got %d", len(strategies))
 	}
 
 	byName := map[string]*store.Strategy{}
@@ -64,6 +64,26 @@ func TestCreateDefaultStrategiesUsesOneReadyToRunClaw402Preset(t *testing.T) {
 		trendCfg.RiskControl.AltcoinMaxPositionValueRatio != store.AutopilotMaxPositionValueRatio ||
 		trendCfg.RiskControl.MaxMarginUsage != 1.0 {
 		t.Fatalf("default strategy should enforce a 5x-equity hard cap per position, got risk=%+v", trendCfg.RiskControl)
+	}
+
+	for name, preset := range map[string]string{
+		"NOFX BTC/ETH Trend": store.RuleBasedPresetTrendFollowing,
+		"NOFX RSI Pullback":  store.RuleBasedPresetRSIPullback,
+	} {
+		strategy := byName[name]
+		if strategy == nil {
+			t.Fatalf("missing rule-based preset %q", name)
+		}
+		if strategy.IsActive || strategy.IsPublic {
+			t.Fatalf("rule-based preset %q must be inactive and private: %+v", name, strategy)
+		}
+		cfg, err := strategy.ParseConfig()
+		if err != nil {
+			t.Fatalf("parse %q: %v", name, err)
+		}
+		if cfg.RuleBased == nil || cfg.RuleBased.Preset != preset {
+			t.Fatalf("rule-based preset %q config = %+v, want %q", name, cfg.RuleBased, preset)
+		}
 	}
 }
 
@@ -150,6 +170,23 @@ func TestCreateDefaultStrategiesMigratesLegacyPresetsWithoutOverridingActiveCust
 		t.Fatalf("create custom failed: %v", err)
 	}
 
+	existingRuleCfg := store.GetRuleBasedStrategyConfig(store.RuleBasedPresetTrendFollowing)
+	existingRuleCfg.RiskControl.MaxPositions = 8
+	existingRule := &store.Strategy{
+		ID:          uuid.New().String(),
+		UserID:      userID,
+		Name:        "NOFX BTC/ETH Trend",
+		Description: "user-edited native strategy description",
+		IsActive:    true,
+		IsPublic:    true,
+	}
+	if err := existingRule.SetConfig(&existingRuleCfg); err != nil {
+		t.Fatalf("existing rule SetConfig failed: %v", err)
+	}
+	if err := st.Strategy().Create(existingRule); err != nil {
+		t.Fatalf("create existing rule failed: %v", err)
+	}
+
 	s := &Server{store: st}
 	if err := s.createDefaultStrategies(userID, "zh"); err != nil {
 		t.Fatalf("createDefaultStrategies failed: %v", err)
@@ -176,7 +213,28 @@ func TestCreateDefaultStrategiesMigratesLegacyPresetsWithoutOverridingActiveCust
 	if byName["NOFX Claw402 Auto Strategy"] != 1 {
 		t.Fatalf("expected exactly one NOFX Claw402 Auto Strategy, got names=%+v", byName)
 	}
-	if len(activeNames) != 1 || activeNames[0] != "aa" {
-		t.Fatalf("existing active custom strategy should stay the only active one, got %+v", activeNames)
+	if byName["NOFX BTC/ETH Trend"] != 1 || byName["NOFX RSI Pullback"] != 1 {
+		t.Fatalf("expected exactly one of each rule-based preset, got names=%+v", byName)
+	}
+	if len(activeNames) != 2 {
+		t.Fatalf("existing active strategies should be preserved, got %+v", activeNames)
+	}
+	for _, strategy := range strategies {
+		if strategy.Name != "NOFX BTC/ETH Trend" {
+			continue
+		}
+		if !strategy.IsActive || !strategy.IsPublic {
+			t.Fatalf("existing native preset active/public state should be preserved: %+v", strategy)
+		}
+		if strategy.Description != "user-edited native strategy description" {
+			t.Fatalf("existing native preset description was overwritten: %q", strategy.Description)
+		}
+		cfg, err := strategy.ParseConfig()
+		if err != nil {
+			t.Fatalf("parse synchronized rule preset: %v", err)
+		}
+		if cfg.RiskControl.MaxPositions != 8 {
+			t.Fatalf("existing native preset config was overwritten: %+v", cfg.RiskControl)
+		}
 	}
 }

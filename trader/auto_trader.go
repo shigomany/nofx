@@ -713,7 +713,7 @@ func calculatePnLPercentage(unrealizedPnl, marginUsed float64) float64 {
 
 // runPreLaunchChecks performs pre-launch checks for claw402 users (wallet balance, runway estimate)
 func (at *AutoTrader) runPreLaunchChecks() {
-	if !store.IsClaw402Config(at.config.AIModel) {
+	if at.usesRuleBasedStrategy() || !store.IsClaw402Config(at.config.AIModel) {
 		return
 	}
 

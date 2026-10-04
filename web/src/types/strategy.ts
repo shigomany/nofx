@@ -63,6 +63,11 @@ export interface AIStrategyConfig {
   custom_prompt?: string;
   risk_control: RiskControlConfig;
   prompt_sections?: PromptSectionsConfig;
+  rule_based?: RuleBasedStrategyConfig;
+}
+
+export interface RuleBasedStrategyConfig {
+  preset: 'trend_following' | 'rsi_pullback';
 }
 
 export interface PublishStrategyConfig {
