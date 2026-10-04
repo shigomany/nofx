@@ -362,6 +362,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
     allItems: T[] | undefined
     clearFields: (item: T) => T
     buildRequest: (items: T[]) => any
+    beforeUpdate?: () => Promise<void>
     updateApi: (request: any) => Promise<void>
     refreshApi: () => Promise<T[]>
     setItems: (items: T[]) => void
@@ -389,6 +390,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
         ) || []
 
       const request = config.buildRequest(updatedItems)
+      await config.beforeUpdate?.()
       await config.updateApi(request)
       toast.success(t('aiTradersToast.configUpdated', language))
 
@@ -403,6 +405,7 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
   }
 
   const handleDeleteModelConfig = async (modelId: string) => {
+    const targetModel = allModels?.find((model) => model.id === modelId)
     await handleDeleteConfig({
       id: modelId,
       type: 'model',
@@ -431,6 +434,17 @@ export function AITradersPage({ onTraderSelect }: AITradersPageProps) {
           ])
         ),
       }),
+      beforeUpdate: async () => {
+        if (targetModel?.provider === 'codex') {
+          try {
+            await api.disconnectCodex()
+          } catch (error) {
+            console.error('Failed to disconnect Codex account:', error)
+            toast.error(t('modelConfig.codexDisconnectFailed', language))
+            throw error
+          }
+        }
+      },
       updateApi: api.updateModelConfigs,
       refreshApi: api.getModelConfigs,
       setItems: (items) => {

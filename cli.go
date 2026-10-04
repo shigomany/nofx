@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"nofx/auth"
 	"nofx/config"
 	"nofx/crypto"
+	"nofx/internal/codexgateway"
 	"nofx/logger"
 	"nofx/store"
 
@@ -166,6 +168,11 @@ func runResetAccount(args []string) {
 	}
 	defer st.Close()
 
+	if err := disconnectCodexForAccountReset(st); err != nil {
+		fmt.Fprintf(os.Stderr, "error: Codex sessions could not be revoked; account data was preserved: %v\n", err)
+		os.Exit(1)
+	}
+
 	err = st.Transaction(func(tx *gorm.DB) error {
 		tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&store.Trader{})
 		tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&store.Strategy{})
@@ -182,6 +189,32 @@ func runResetAccount(args []string) {
 	}
 
 	fmt.Println("✓ System wiped. Register a fresh account and re-import everything.")
+}
+
+// Account reset is explicitly confirmed by the operator before this is called.
+// Revoke sidecar profiles before deleting the user IDs needed to address them.
+func disconnectCodexForAccountReset(st *store.Store) error {
+	var codexConfigs int64
+	if err := st.GormDB().Model(&store.AIModel{}).Where("provider = ?", "codex").Count(&codexConfigs).Error; err != nil {
+		return err
+	}
+	if os.Getenv("CODEX_GATEWAY_URL") == "" && codexConfigs == 0 {
+		return nil
+	}
+	gateway, err := codexgateway.New()
+	if err != nil {
+		return err
+	}
+	ids, err := st.User().GetAllIDs()
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := gateway.Request(context.Background(), "POST", codexgateway.ProfileID(id), "logout", nil, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // resolveNewPassword returns the new password from the --password flag, or
