@@ -7,6 +7,7 @@ export interface AIModel {
   apiKey?: string
   customApiUrl?: string
   customModelName?: string
+  reasoningEffort?: string
   walletAddress?: string
   balanceUsdc?: string
 }
@@ -28,6 +29,11 @@ export interface CodexCatalogModel {
   model?: string
   displayName?: string
   isDefault?: boolean
+  supportedReasoningEfforts?: Array<{
+    reasoningEffort: string
+    description?: string
+  }>
+  defaultReasoningEffort?: string
 }
 
 export interface TelegramConfig {
@@ -141,6 +147,7 @@ export interface UpdateModelConfigRequest {
       api_key: string
       custom_api_url?: string
       custom_model_name?: string
+      reasoning_effort?: string
     }
   }
 }

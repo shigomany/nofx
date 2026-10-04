@@ -11,6 +11,7 @@ import pytest
 from apps.codex_gateway.app_server import (
     APP_SERVER_STREAM_LIMIT_BYTES,
     DISABLED_CODEX_FEATURES,
+    ENABLED_CODEX_FEATURES,
     MAX_GENERATION_TIMEOUT_SECONDS,
     CodexProfile,
     CodexProfileManager,
@@ -64,10 +65,20 @@ class FakeRpc:
                     },
                     {
                         "id": "gpt-6.1-sol",
+                        "defaultReasoningEffort": "low",
                         "supportedReasoningEfforts": [
                             {"reasoningEffort": "low"},
                             {"reasoningEffort": "high"},
+                            {
+                                "reasoningEffort": "ultra",
+                                "description": "automatic delegation",
+                            },
                         ],
+                    },
+                    {
+                        "id": "gpt-6-sol",
+                        "defaultReasoningEffort": "none",
+                        "supportedReasoningEfforts": [],
                     },
                 ],
                 "nextCursor": None,
@@ -161,6 +172,26 @@ async def test_catalog_drives_model_and_effort_selection(
     assert rpc.notification_timeouts == [MAX_GENERATION_TIMEOUT_SECONDS] * 2
 
 
+async def test_catalog_sanitizes_ultra_and_defaults_empty_efforts_to_low(
+    tmp_path: Path,
+) -> None:
+    rpc = FakeRpc()
+    profile = CodexProfile(profile_id=str(uuid4()), home=tmp_path, rpc=rpc)
+
+    result = await profile.models()
+
+    by_id = {entry["id"]: entry for entry in result["data"]}
+    assert by_id["gpt-6.1-sol"]["defaultReasoningEffort"] == "low"
+    assert [
+        effort["reasoningEffort"]
+        for effort in by_id["gpt-6.1-sol"]["supportedReasoningEfforts"]
+    ] == ["low", "high"]
+    assert by_id["gpt-6-sol"]["defaultReasoningEffort"] == "low"
+    assert by_id["gpt-6-sol"]["supportedReasoningEfforts"] == [
+        {"reasoningEffort": "low"}
+    ]
+
+
 async def test_unavailable_model_and_effort_fail_before_thread(
     tmp_path: Path, schema: dict[str, Any]
 ) -> None:
@@ -174,7 +205,7 @@ async def test_unavailable_model_and_effort_fail_before_thread(
         await profile.generate(
             system="x",
             user="y",
-            model="gpt-5.6-luna",
+            model="gpt-6.1-sol",
             effort="ultra",
             output_schema=schema,
         )
@@ -300,6 +331,7 @@ async def test_rpc_child_gets_allowlisted_environment_and_tool_disables(
     args = captured["args"]
     assert "--strict-config" in args
     assert all(feature in args for feature in DISABLED_CODEX_FEATURES)
+    assert all(feature in args for feature in ENABLED_CODEX_FEATURES)
 
 
 async def test_disconnect_is_only_operation_that_removes_profile(

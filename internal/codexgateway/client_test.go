@@ -29,7 +29,7 @@ func TestGenerateKeepsCredentialsPrivateAndValidatesFinalOutput(t *testing.T) {
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
 			t.Error("invalid request")
 		}
-		if body["effort"] != "low" || body["timeout_seconds"] != float64(35) {
+		if body["effort"] != "high" || body["timeout_seconds"] != float64(35) {
 			t.Error("wrong generation limits")
 		}
 		if strings.Contains(r.URL.String(), strings.Repeat("x", 32)) {
@@ -40,7 +40,7 @@ func TestGenerateKeepsCredentialsPrivateAndValidatesFinalOutput(t *testing.T) {
 	}))
 	defer server.Close()
 	client := &Client{URL: server.URL, Token: strings.Repeat("x", 32), HTTP: server.Client()}
-	result, err := client.Generate(context.Background(), profile, "test-model", "policy", "input", 35*time.Second)
+	result, err := client.Generate(context.Background(), profile, "test-model", "policy", "input", 35*time.Second, "high")
 	if err != nil || result.Content.Response != "<decision>hold</decision>" {
 		t.Fatalf("unexpected response: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestRejectsInvalidProfilesAndEmptyOutput(t *testing.T) {
 	defer server.Close()
 	client.URL = server.URL
 	client.HTTP = server.Client()
-	if _, err := client.Generate(context.Background(), ProfileID("alice"), "test", "policy", "input", time.Second); err == nil {
+	if _, err := client.Generate(context.Background(), ProfileID("alice"), "test", "policy", "input", time.Second, ""); err == nil {
 		t.Fatal("accepted missing final output")
 	}
 }

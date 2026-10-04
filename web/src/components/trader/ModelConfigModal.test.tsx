@@ -48,10 +48,36 @@ describe('ModelConfigModal subscription providers', () => {
     })
     apiMocks.getCodexModels.mockResolvedValue({
       data: [
-        { id: 'gpt-5.6-luna', displayName: 'GPT-5.6 Luna' },
-        { id: 'gpt-6.1-sol', displayName: 'GPT-6.1 Sol', isDefault: true },
+        {
+          id: 'gpt-6-astra',
+          supportedReasoningEfforts: [
+            { reasoningEffort: 'low' },
+            { reasoningEffort: 'high' },
+          ],
+          defaultReasoningEffort: 'low',
+        },
+        {
+          id: 'gpt-6.1-sol',
+          isDefault: true,
+          supportedReasoningEfforts: [
+            { reasoningEffort: 'low' },
+            { reasoningEffort: 'medium' },
+            { reasoningEffort: 'high', description: 'Deeper reasoning' },
+            { reasoningEffort: 'ultra' },
+          ],
+          defaultReasoningEffort: 'medium',
+        },
+        {
+          id: 'gpt-6-sol',
+          supportedReasoningEfforts: [
+            { reasoningEffort: 'none' },
+            { reasoningEffort: 'low' },
+          ],
+          defaultReasoningEffort: 'low',
+        },
       ],
     })
+    apiMocks.testCodex.mockResolvedValue({ ok: true, response: 'ok' })
 
     render(
       <ModelConfigModal
@@ -73,9 +99,25 @@ describe('ModelConfigModal subscription providers', () => {
       'Connected (Plus)'
     )
     expect(screen.getByLabelText('Codex model')).toHaveValue('gpt-6.1-sol')
+    expect(screen.getByLabelText('Reasoning effort')).toHaveValue('medium')
+    expect(
+      screen
+        .getByLabelText('Reasoning effort')
+        .querySelector('option[value="ultra"]')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getAllByLabelText('Codex model')[0].querySelectorAll('option')[0]
+    ).toHaveTextContent('gpt-6.1-sol')
+    fireEvent.change(screen.getByLabelText('Reasoning effort'), {
+      target: { value: 'high' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Test Connection' }))
+    await waitFor(() =>
+      expect(apiMocks.testCodex).toHaveBeenCalledWith('gpt-6.1-sol', 'high')
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Save Codex' }))
 
-    expect(onSave).toHaveBeenCalledWith('codex', '', '', 'gpt-6.1-sol')
+    expect(onSave).toHaveBeenCalledWith('codex', '', '', 'gpt-6.1-sol', 'high')
   })
 
   it('connects successfully after StrictMode replays mount effects', async () => {
@@ -89,7 +131,16 @@ describe('ModelConfigModal subscription providers', () => {
       status: 'connected',
     })
     apiMocks.getCodexModels.mockResolvedValue({
-      data: [{ id: 'gpt-5.6-luna', displayName: 'GPT-5.6 Luna' }],
+      data: [
+        {
+          id: 'gpt-6.1-sol',
+          supportedReasoningEfforts: [
+            { reasoningEffort: 'low' },
+            { reasoningEffort: 'high' },
+          ],
+          defaultReasoningEffort: 'low',
+        },
+      ],
     })
 
     render(
@@ -194,7 +245,16 @@ describe('ModelConfigModal subscription providers', () => {
       planType: 'Plus',
     })
     apiMocks.getCodexModels.mockResolvedValue({
-      data: [{ id: 'gpt-5.6-luna', displayName: 'GPT-5.6 Luna' }],
+      data: [
+        {
+          id: 'gpt-6.1-sol',
+          supportedReasoningEfforts: [
+            { reasoningEffort: 'low' },
+            { reasoningEffort: 'high' },
+          ],
+          defaultReasoningEffort: 'low',
+        },
+      ],
     })
 
     render(
@@ -206,7 +266,8 @@ describe('ModelConfigModal subscription providers', () => {
             id: 'user-123_codex',
             enabled: true,
             has_api_key: true,
-            customModelName: 'gpt-5.6-luna',
+            customModelName: 'gpt-6.1-sol',
+            reasoningEffort: 'high',
           },
         ]}
         editingModelId="user-123_codex"
@@ -219,7 +280,8 @@ describe('ModelConfigModal subscription providers', () => {
 
     expect(await screen.findByRole('status')).toHaveTextContent('Connected')
     expect(apiMocks.connectCodex).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('Codex model')).toHaveValue('gpt-5.6-luna')
+    expect(screen.getByLabelText('Codex model')).toHaveValue('gpt-6.1-sol')
+    expect(screen.getByLabelText('Reasoning effort')).toHaveValue('high')
   })
 
   it('disconnects a saved Codex account only from the explicit button', async () => {

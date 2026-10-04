@@ -11,6 +11,22 @@ Open the official OpenAI device authorization link, enter the displayed code,
 and authorize your own ChatGPT account. Then choose a model from the runtime's
 catalog and run **Test connection**. A completed test verifies access to that
 model; being present in the catalog alone does not verify entitlement.
+The model menu prioritizes `gpt-6.1-sol`, `gpt-6-sol`, and `gpt-6-astra` when
+the connected runtime exposes them. New configurations default to
+`gpt-6.1-sol`; existing saved models are preserved.
+
+Choose **Reasoning effort** before testing or saving. The setting persists
+with the model and applies to trader analysis, strategy generation, and text
+requests made through the selected provider. The menu shows the intersection
+of the model's documented levels and the runtime's supported levels. CLI
+0.159.1 exposes `low`, `medium`, `high`, `xhigh`, and `max` for these three
+models. Although the API documents `none` for GPT-6 Sol, this Codex runtime
+does not expose it. `ultra` is excluded because it enables automatic delegation;
+the gateway is restricted to text analysis without tools or subagents.
+Previously saved configurations with no effort retain `low`. Changing models
+uses the new model's runtime default. Requests remain bounded by the existing
+120-second generation timeout and fail without a partial trading decision.
+
 Use **Disconnect** or remove the Codex provider to revoke its saved session.
 Stop any running Codex traders before disconnecting. Closing the settings modal
 only cancels a pending sign-in; it does not disconnect a saved account.
@@ -68,7 +84,10 @@ subscription or its key alone does not establish access to the standard API.
 
 Official references:
 
-- [Codex App Server](https://developers.openai.com/codex/app-server)
-- [Codex authentication](https://developers.openai.com/codex/auth)
+- [Codex App Server](https://learn.chatgpt.com/docs/app-server)
+- [GPT-6.1 Sol](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
+- [GPT-6 Sol](https://developers.openai.com/api/docs/models/gpt-6-sol)
+- [GPT-6 Astra](https://developers.openai.com/api/docs/models/gpt-6-astra)
+- [Codex authentication](https://learn.chatgpt.com/docs/auth)
 - [Z.ai OpenAI-compatible API](https://docs.z.ai/guides/develop/openai/python)
 - [Z.ai Coding Plan usage policy](https://docs.z.ai/devpack/usage-policy)

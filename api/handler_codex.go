@@ -98,15 +98,8 @@ func (s *Server) handleCodexModels(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "Connect your ChatGPT account first"})
 		return
 	}
-	var result struct {
-		Data []struct {
-			ID          string `json:"id"`
-			Model       string `json:"model"`
-			DisplayName string `json:"displayName"`
-			IsDefault   bool   `json:"isDefault"`
-		} `json:"data"`
-	}
-	if err := gateway.Request(c.Request.Context(), http.MethodGet, profile, "models", nil, &result); err != nil {
+	result, err := gateway.Models(c.Request.Context(), profile)
+	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
 	}
@@ -138,10 +131,15 @@ func (s *Server) handleCodexTest(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Model string `json:"model"`
+		Model  string `json:"model"`
+		Effort string `json:"effort"`
 	}
 	if c.ShouldBindJSON(&req) != nil || strings.TrimSpace(req.Model) == "" || len(req.Model) > 100 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Model required"})
+		return
+	}
+	if err := codexgateway.ValidateEffort(req.Model, req.Effort); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	account, err := gateway.Account(c.Request.Context(), profile)
@@ -149,9 +147,13 @@ func (s *Server) handleCodexTest(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"error": "Connect your ChatGPT account first"})
 		return
 	}
+	if err := gateway.ValidateSelection(c.Request.Context(), profile, req.Model, req.Effort); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 123*time.Second)
 	defer cancel()
-	result, err := gateway.Generate(ctx, profile, req.Model, "Return the requested text in the response field.", "Reply with exactly OK.", 120*time.Second)
+	result, err := gateway.Generate(ctx, profile, req.Model, "Return the requested text in the response field.", "Reply with exactly OK.", 120*time.Second, req.Effort)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return

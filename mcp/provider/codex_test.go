@@ -26,12 +26,13 @@ func TestCodexForwardsOnlyTextAndCompletedAnswers(t *testing.T) {
 		t.Fatal("Codex is not registered")
 	}
 	client.SetAPIKey(codexgateway.ProfileID("alice"), "https://ignored.invalid", "selected-model")
+	mcp.ConfigureReasoningEffort(client, "xhigh")
 	var chunks []string
 	result, err := client.CallWithRequestStream(&mcp.Request{Ctx: context.Background(), Messages: []mcp.Message{mcp.NewSystemMessage("policy"), mcp.NewUserMessage("input")}}, func(s string) { chunks = append(chunks, s) })
 	if err != nil || result != "hold" || len(chunks) != 1 || chunks[0] != "hold" {
 		t.Fatalf("invalid completion: %v", err)
 	}
-	if received["model"] != "selected-model" || received["system"] != "policy\n" {
+	if received["model"] != "selected-model" || received["system"] != "policy\n" || received["effort"] != "xhigh" {
 		t.Fatal("wrong model or policy")
 	}
 	if strings.Contains(received["user"].(string), strings.Repeat("x", 32)) {

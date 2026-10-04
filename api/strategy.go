@@ -753,6 +753,7 @@ func (s *Server) runRealAITest(userID, modelID, systemPrompt, userPrompt string)
 	default:
 		aiClient.SetAPIKey(apiKey, model.CustomAPIURL, model.CustomModelName)
 	}
+	mcp.ConfigureReasoningEffort(aiClient, model.ReasoningEffort)
 
 	// Call AI API
 	response, err := aiClient.CallWithMessages(systemPrompt, userPrompt)

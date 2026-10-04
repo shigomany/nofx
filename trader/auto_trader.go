@@ -139,6 +139,7 @@ type AutoTraderConfig struct {
 	CustomAPIURL     string
 	CustomAPIKey     string
 	CustomModelName  string
+	ReasoningEffort  string
 	Claw402WalletKey string
 
 	// Scan configuration
@@ -264,6 +265,7 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 	default:
 		mcpClient.SetAPIKey(apiKey, customURL, config.CustomModelName)
 	}
+	mcp.ConfigureReasoningEffort(mcpClient, config.ReasoningEffort)
 	logger.Infof("🤖 [%s] Using %s AI", config.Name, aiModel)
 
 	if config.CustomAPIURL != "" || config.CustomModelName != "" {

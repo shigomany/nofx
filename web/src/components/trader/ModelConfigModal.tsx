@@ -24,7 +24,8 @@ interface ModelConfigModalProps {
     modelId: string,
     apiKey: string,
     baseUrl?: string,
-    modelName?: string
+    modelName?: string,
+    reasoningEffort?: string
   ) => void
   onDelete: (modelId: string) => void
   onClose: () => void
@@ -50,12 +51,15 @@ export function ModelConfigModal({
   const [apiKey, setApiKey] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [modelName, setModelName] = useState('')
+  const [reasoningEffort, setReasoningEffort] = useState('')
 
   // The configured entry carries the saved details (wallet address, custom
   // model name, has_api_key); the template from supportedModels only describes
   // the provider. When editing, the configured entry must win — both can share
   // the same id (e.g. "claw402").
-  const configuredModel = configuredModels?.find((m) => m.id === selectedModelId)
+  const configuredModel = configuredModels?.find(
+    (m) => m.id === selectedModelId
+  )
   const templateModel = allModels?.find((m) => m.id === selectedModelId)
   const selectedModel = editingModelId
     ? configuredModel || templateModel
@@ -69,6 +73,7 @@ export function ModelConfigModal({
       setApiKey(selectedModel.apiKey || '')
       setBaseUrl(selectedModel.customApiUrl || '')
       setModelName(selectedModel.customModelName || '')
+      setReasoningEffort(selectedModel.reasoningEffort || 'low')
     }
   }, [editingModelId, selectedModel])
 
@@ -109,7 +114,8 @@ export function ModelConfigModal({
       selectedModelId,
       isCodex ? '' : apiKey.trim(),
       baseUrl.trim() || undefined,
-      modelName.trim() || undefined
+      modelName.trim() || undefined,
+      reasoningEffort
     )
   }
 
@@ -230,10 +236,21 @@ export function ModelConfigModal({
             selectedModel.provider === 'codex' && (
               <CodexConfigForm
                 modelName={modelName}
+                reasoningEffort={reasoningEffort}
+                savedReasoningEffort={configuredModel?.reasoningEffort}
                 isConfigured={hasExistingKey}
                 onModelNameChange={setModelName}
+                onReasoningEffortChange={setReasoningEffort}
                 onBack={handleBack}
-                onSave={() => onSave(selectedModelId, '', '', modelName.trim())}
+                onSave={() =>
+                  onSave(
+                    selectedModelId,
+                    '',
+                    '',
+                    modelName.trim(),
+                    reasoningEffort || 'low'
+                  )
+                }
                 language={language}
               />
             )}
@@ -453,7 +470,8 @@ function Claw402ConfigForm({
   // Editing with a stored key: allow saving (e.g. switching model) without
   // re-entering the private key, as long as the field is left blank.
   const canSubmit =
-    isKeyValid || (Boolean(editingModelId) && Boolean(hasExistingKey) && !apiKey)
+    isKeyValid ||
+    (Boolean(editingModelId) && Boolean(hasExistingKey) && !apiKey)
 
   // Truncate address for display
 
@@ -574,20 +592,18 @@ function Claw402ConfigForm({
           {t('modelConfig.allModelsClaw', language)}
         </div>
         <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
-          {['GPT', 'Claude', 'DeepSeek', 'GLM'].map(
-            (name) => (
-              <span
-                key={name}
-                className="text-[11px] px-2 py-0.5 rounded-full"
-                style={{
-                  background: 'rgba(26,24,19,0.06)',
-                  color: '#8A8478',
-                }}
-              >
-                {name}
-              </span>
-            )
-          )}
+          {['GPT', 'Claude', 'DeepSeek', 'GLM'].map((name) => (
+            <span
+              key={name}
+              className="text-[11px] px-2 py-0.5 rounded-full"
+              style={{
+                background: 'rgba(26,24,19,0.06)',
+                color: '#8A8478',
+              }}
+            >
+              {name}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -1181,15 +1197,21 @@ function Claw402ConfigForm({
 
 function CodexConfigForm({
   modelName,
+  reasoningEffort,
+  savedReasoningEffort,
   isConfigured,
   onModelNameChange,
+  onReasoningEffortChange,
   onBack,
   onSave,
   language,
 }: {
   modelName: string
+  reasoningEffort: string
+  savedReasoningEffort?: string
   isConfigured: boolean
   onModelNameChange: (value: string) => void
+  onReasoningEffortChange: (value: string) => void
   onBack: () => void
   onSave: () => void
   language: Language
@@ -1200,7 +1222,12 @@ function CodexConfigForm({
     'idle' | 'pending' | 'connected' | 'failed'
   >('idle')
   const [models, setModels] = useState<
-    Array<{ id: string; label: string; isDefault?: boolean }>
+    Array<{
+      id: string
+      efforts: Array<{ id: string; description?: string }>
+      defaultEffort: string
+      isDefault?: boolean
+    }>
   >([])
   const [message, setMessage] = useState('')
   const [testing, setTesting] = useState(false)
@@ -1240,33 +1267,82 @@ function CodexConfigForm({
   const loadModels = async () => {
     const catalog = await api.getCodexModels()
     if (!mountedRef.current) return
-    const nextModels = catalog.data.map((item) => ({
-      id: item.model || item.id,
-      label: item.displayName || item.model || item.id,
-      isDefault: item.isDefault,
-    }))
+    const priority = ['gpt-6.1-sol', 'gpt-6-sol', 'gpt-6-astra']
+    const documentedEfforts: Record<string, string[]> = {
+      'gpt-6-sol': ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+      'gpt-6.1-sol': ['low', 'medium', 'high', 'xhigh', 'max'],
+      'gpt-6-astra': ['low', 'medium', 'high', 'xhigh', 'max'],
+    }
+    const nextModels = catalog.data
+      .map((item) => ({
+        id: item.model || item.id,
+        efforts: (item.supportedReasoningEfforts || [])
+          .filter((effort) => {
+            if (effort.reasoningEffort === 'ultra') return false
+            const modelId = item.model || item.id
+            return (
+              !documentedEfforts[modelId] ||
+              documentedEfforts[modelId].includes(effort.reasoningEffort)
+            )
+          })
+          .map((effort) => ({
+            id: effort.reasoningEffort,
+            description: effort.description,
+          })),
+        defaultEffort: item.defaultReasoningEffort || 'low',
+        isDefault: item.isDefault,
+      }))
+      .sort((left, right) => {
+        const leftPriority = priority.indexOf(left.id)
+        const rightPriority = priority.indexOf(right.id)
+        if (leftPriority === -1 && rightPriority === -1) return 0
+        if (leftPriority === -1) return 1
+        if (rightPriority === -1) return -1
+        return leftPriority - rightPriority
+      })
     setModels(nextModels)
-    if (!modelName || !nextModels.some((item) => item.id === modelName)) {
-      onModelNameChange(
+    let selectedModel = nextModels.find((item) => item.id === modelName)
+    if (!selectedModel) {
+      const nextModelId =
         nextModels.find((item) => item.isDefault)?.id ||
-          nextModels.find((item) => item.id === 'gpt-5.6-luna')?.id ||
-          nextModels[0]?.id ||
-          'gpt-5.6-luna'
-      )
+        nextModels.find((item) => item.id === 'gpt-5.6-luna')?.id ||
+        nextModels[0]?.id ||
+        ''
+      onModelNameChange(nextModelId)
+      selectedModel = nextModels.find((item) => item.id === nextModelId)
+    }
+    if (selectedModel) {
+      const supported = selectedModel.efforts
+      const preferredEffort =
+        reasoningEffort ||
+        (isConfigured
+          ? savedReasoningEffort || 'low'
+          : selectedModel.defaultEffort)
+      const nextEffort = supported.some((item) => item.id === preferredEffort)
+        ? preferredEffort
+        : supported.some((item) => item.id === selectedModel.defaultEffort)
+          ? selectedModel.defaultEffort
+          : supported[0]?.id || 'low'
+      onReasoningEffortChange(nextEffort)
     }
   }
 
   useEffect(() => {
     if (!isConfigured) return
     let active = true
-    void api.getCodexStatus()
+    void api
+      .getCodexStatus()
       .then(async (result) => {
         if (!active || !result.connected) return
         await loadModels()
         if (!active) return
         setStatus('connected')
         const connectedLabel = t('modelConfig.codexConnected', language)
-        setMessage(result.planType ? `${connectedLabel} (${result.planType})` : connectedLabel)
+        setMessage(
+          result.planType
+            ? `${connectedLabel} (${result.planType})`
+            : connectedLabel
+        )
       })
       .catch(() => {
         if (!active) return
@@ -1341,7 +1417,7 @@ function CodexConfigForm({
     setTesting(true)
     setMessage('')
     try {
-      const result = await api.testCodex(modelName)
+      const result = await api.testCodex(modelName, reasoningEffort || 'low')
       if (!mountedRef.current) return
       setMessage(result.response || 'Connection test succeeded.')
     } catch {
@@ -1362,6 +1438,7 @@ function CodexConfigForm({
       setStatus('idle')
       setModels([])
       onModelNameChange('')
+      onReasoningEffortChange('low')
       setMessage(t('modelConfig.codexDisconnected', language))
     } catch {
       if (mountedRef.current) {
@@ -1447,7 +1524,19 @@ function CodexConfigForm({
             <select
               aria-label={t('modelConfig.codexModel', language)}
               value={modelName}
-              onChange={(event) => onModelNameChange(event.target.value)}
+              onChange={(event) => {
+                const nextModel = models.find(
+                  (model) => model.id === event.target.value
+                )
+                onModelNameChange(event.target.value)
+                onReasoningEffortChange(
+                  nextModel?.efforts.some(
+                    (effort) => effort.id === nextModel.defaultEffort
+                  )
+                    ? nextModel.defaultEffort
+                    : nextModel?.efforts[0]?.id || 'low'
+                )
+              }}
               className="mt-2 w-full px-4 py-3 rounded-xl"
               style={{
                 background: '#F1ECE2',
@@ -1456,7 +1545,33 @@ function CodexConfigForm({
             >
               {models.map((model) => (
                 <option key={model.id} value={model.id}>
-                  {model.label}
+                  {model.id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label
+            className="block text-sm font-semibold"
+            style={{ color: '#1A1813' }}
+          >
+            {t('modelConfig.reasoningEffort', language)}
+            <select
+              aria-label={t('modelConfig.reasoningEffort', language)}
+              value={reasoningEffort}
+              onChange={(event) => onReasoningEffortChange(event.target.value)}
+              className="mt-2 w-full px-4 py-3 rounded-xl"
+              style={{
+                background: '#F1ECE2',
+                border: '1px solid rgba(26,24,19,0.14)',
+              }}
+            >
+              {(
+                models.find((model) => model.id === modelName)?.efforts || []
+              ).map((effort) => (
+                <option key={effort.id} value={effort.id}>
+                  {effort.description
+                    ? `${effort.id} — ${effort.description}`
+                    : effort.id}
                 </option>
               ))}
             </select>
@@ -1640,7 +1755,9 @@ function StandardProviderConfigForm({
           }}
         >
           Current model key status:{' '}
-          {selectedModel.has_api_key ? 'API Key configured' : 'API Key not configured'}
+          {selectedModel.has_api_key
+            ? 'API Key configured'
+            : 'API Key not configured'}
         </div>
       )}
 
@@ -1686,38 +1803,38 @@ function StandardProviderConfigForm({
 
       {/* Custom Base URL */}
       <div className="space-y-2">
-          <label
-            className="flex items-center gap-2 text-sm font-semibold"
-            style={{ color: '#1A1813' }}
+        <label
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color: '#1A1813' }}
+        >
+          <svg
+            className="w-4 h-4"
+            style={{ color: '#E0483B' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            <svg
-              className="w-4 h-4"
-              style={{ color: '#E0483B' }}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-              />
-            </svg>
-            {t('customBaseURL', language)}
-          </label>
-          <input
-            type="url"
-            value={baseUrl}
-            onChange={(e) => onBaseUrlChange(e.target.value)}
-            placeholder={t('customBaseURLPlaceholder', language)}
-            className="w-full px-4 py-3 rounded-xl"
-            style={{
-              background: '#F1ECE2',
-              border: '1px solid rgba(26,24,19,0.14)',
-              color: '#1A1813',
-            }}
-          />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+            />
+          </svg>
+          {t('customBaseURL', language)}
+        </label>
+        <input
+          type="url"
+          value={baseUrl}
+          onChange={(e) => onBaseUrlChange(e.target.value)}
+          placeholder={t('customBaseURLPlaceholder', language)}
+          className="w-full px-4 py-3 rounded-xl"
+          style={{
+            background: '#F1ECE2',
+            border: '1px solid rgba(26,24,19,0.14)',
+            color: '#1A1813',
+          }}
+        />
         <div className="text-xs" style={{ color: '#8A8478' }}>
           {t('leaveBlankForDefault', language)}
         </div>
@@ -1725,38 +1842,38 @@ function StandardProviderConfigForm({
 
       {/* Custom Model Name */}
       <div className="space-y-2">
-          <label
-            className="flex items-center gap-2 text-sm font-semibold"
-            style={{ color: '#1A1813' }}
+        <label
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color: '#1A1813' }}
+        >
+          <svg
+            className="w-4 h-4"
+            style={{ color: '#E0483B' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
           >
-            <svg
-              className="w-4 h-4"
-              style={{ color: '#E0483B' }}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-              />
-            </svg>
-            {t('customModelName', language)}
-          </label>
-          <input
-            type="text"
-            value={modelName}
-            onChange={(e) => onModelNameChange(e.target.value)}
-            placeholder={t('customModelNamePlaceholder', language)}
-            className="w-full px-4 py-3 rounded-xl"
-            style={{
-              background: '#F1ECE2',
-              border: '1px solid rgba(26,24,19,0.14)',
-              color: '#1A1813',
-            }}
-          />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+            />
+          </svg>
+          {t('customModelName', language)}
+        </label>
+        <input
+          type="text"
+          value={modelName}
+          onChange={(e) => onModelNameChange(e.target.value)}
+          placeholder={t('customModelNamePlaceholder', language)}
+          className="w-full px-4 py-3 rounded-xl"
+          style={{
+            background: '#F1ECE2',
+            border: '1px solid rgba(26,24,19,0.14)',
+            color: '#1A1813',
+          }}
+        />
         <div className="text-xs" style={{ color: '#8A8478' }}>
           {t('leaveBlankForDefaultModel', language)}
         </div>
@@ -1800,8 +1917,7 @@ function StandardProviderConfigForm({
           type="submit"
           disabled={
             !selectedModel ||
-            (!apiKey.trim() &&
-              !(editingModelId && selectedModel.has_api_key))
+            (!apiKey.trim() && !(editingModelId && selectedModel.has_api_key))
           }
           className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ background: '#E0483B', color: '#fff' }}

@@ -16,12 +16,13 @@ from jsonschema import ValidationError, validate
 
 MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$")
 EFFORT_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+SAFE_REASONING_EFFORTS = frozenset({"none", "low", "medium", "high", "xhigh", "max"})
 RPC_TIMEOUT_SECONDS = 15.0
 CLEANUP_TIMEOUT_SECONDS = 2.0
 MAX_GENERATION_TIMEOUT_SECONDS = 120.0
 APP_SERVER_STREAM_LIMIT_BYTES = 1024 * 1024
 
-# These names were verified with `@openai/codex@0.144.3 features list`.
+# These names were verified with `@openai/codex@0.159.1 features list`.
 # Unknown/removed features are intentionally omitted because app-server starts
 # with --strict-config. MCP servers are absent because every profile gets a new,
 # gateway-owned CODEX_HOME containing no inherited configuration.
@@ -32,20 +33,35 @@ DISABLED_CODEX_FEATURES = (
     "browser_use_external",
     "browser_use_full_cdp_access",
     "computer_use",
+    "code_mode_host",
+    "daemon_auto_start",
+    "goals",
+    "hooks",
     "image_generation",
+    "in_app_browser",
+    "in_app_chat",
+    "in_app_local_automation",
     "memories",
     "multi_agent",
     "plugins",
     "remote_plugin",
+    "realtime_conversation",
     "shell_snapshot",
     "shell_tool",
+    "skill_search",
     "skill_mcp_dependency_install",
+    "sleep_tool",
     "standalone_web_search",
     "tool_call_mcp_elicitation",
     "tool_suggest",
+    "unified_exec",
+    "unified_exec_tty",
+    "view_image",
     "web_search_request",
     "workspace_dependencies",
+    "worktrees",
 )
+ENABLED_CODEX_FEATURES = ("skip_host_skill_discovery",)
 
 
 class CodexProtocolError(RuntimeError):
@@ -105,6 +121,8 @@ class JsonRpcSession:
             ]
             for feature in DISABLED_CODEX_FEATURES:
                 args.extend(("--disable", feature))
+            for feature in ENABLED_CODEX_FEATURES:
+                args.extend(("--enable", feature))
             try:
                 self._process = await asyncio.create_subprocess_exec(
                     *args,
@@ -378,7 +396,7 @@ class CodexProfile:
         *,
         system: str,
         user: str,
-        model: str = "gpt-5.6-luna",
+        model: str = "gpt-6.1-sol",
         effort: str = "low",
         output_schema: dict[str, Any],
         timeout_seconds: float = 35,
@@ -447,7 +465,7 @@ class CodexProfile:
                     "Requested Codex model is not available for this profile"
                 )
             supported = _supported_efforts(selected)
-            if supported and effort not in supported:
+            if effort not in supported:
                 raise ValueError(
                     "Requested reasoning effort is not available for this model"
                 )
@@ -600,25 +618,48 @@ def _model_id(entry: dict[str, Any]) -> str:
 
 def _supported_efforts(entry: dict[str, Any]) -> set[str]:
     values = entry.get("supportedReasoningEfforts") or []
-    return {
+    supported = {
         str(item.get("reasoningEffort") or item.get("effort") or "")
         for item in values
         if isinstance(item, dict)
     }
+    supported.intersection_update(SAFE_REASONING_EFFORTS)
+    return supported or {"low"}
 
 
 def _sanitize_model(entry: dict[str, Any]) -> dict[str, Any]:
-    return {
+    result = {
         key: entry[key]
         for key in (
             "id",
             "model",
             "displayName",
             "isDefault",
-            "supportedReasoningEfforts",
         )
         if key in entry
     }
+    safe_efforts = []
+    for item in entry.get("supportedReasoningEfforts") or []:
+        if not isinstance(item, dict):
+            continue
+        effort = str(item.get("reasoningEffort") or item.get("effort") or "")
+        if effort in SAFE_REASONING_EFFORTS:
+            safe_efforts.append(
+                {
+                    key: item[key]
+                    for key in ("reasoningEffort", "description")
+                    if key in item
+                }
+            )
+    if not safe_efforts:
+        safe_efforts = [{"reasoningEffort": "low"}]
+    supported = {str(item.get("reasoningEffort") or "") for item in safe_efforts}
+    default_effort = str(entry.get("defaultReasoningEffort") or "")
+    if default_effort not in supported:
+        default_effort = "low" if "low" in supported else next(iter(supported))
+    result["defaultReasoningEffort"] = default_effort
+    result["supportedReasoningEfforts"] = safe_efforts
+    return result
 
 
 class CodexProfileManager:

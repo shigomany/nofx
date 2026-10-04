@@ -27,6 +27,7 @@ type AIModel struct {
 	APIKey          crypto.EncryptedString `gorm:"column:api_key;default:''" json:"apiKey"`
 	CustomAPIURL    string                 `gorm:"column:custom_api_url;default:''" json:"customApiUrl"`
 	CustomModelName string                 `gorm:"column:custom_model_name;default:''" json:"customModelName"`
+	ReasoningEffort string                 `gorm:"column:reasoning_effort;default:''" json:"reasoningEffort"`
 	CreatedAt       time.Time              `json:"created_at"`
 	UpdatedAt       time.Time              `json:"updated_at"`
 }
@@ -44,6 +45,9 @@ func (s *AIModelStore) initTables() error {
 		var tableExists int64
 		s.db.Raw(`SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'ai_models'`).Scan(&tableExists)
 		if tableExists > 0 {
+			if !s.db.Migrator().HasColumn(&AIModel{}, "ReasoningEffort") {
+				return s.db.Migrator().AddColumn(&AIModel{}, "ReasoningEffort")
+			}
 			return nil
 		}
 	}
@@ -200,11 +204,11 @@ func hasUsableAPIKey(model AIModel) bool {
 
 // Update updates AI model, creates if not exists
 // IMPORTANT: If apiKey is empty string, the existing API key will be preserved (not overwritten)
-func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPIURL, customModelName string) error {
-	return s.UpdateWithName(userID, id, "", enabled, apiKey, customAPIURL, customModelName)
+func (s *AIModelStore) Update(userID, id string, enabled bool, apiKey, customAPIURL, customModelName string, reasoningEffort ...string) error {
+	return s.UpdateWithName(userID, id, "", enabled, apiKey, customAPIURL, customModelName, reasoningEffort...)
 }
 
-func (s *AIModelStore) UpdateWithName(userID, id, name string, enabled bool, apiKey, customAPIURL, customModelName string) error {
+func (s *AIModelStore) UpdateWithName(userID, id, name string, enabled bool, apiKey, customAPIURL, customModelName string, reasoningEffort ...string) error {
 	// Try exact ID match first
 	var existingModel AIModel
 	err := s.db.Where("user_id = ? AND id = ?", userID, id).First(&existingModel).Error
@@ -215,6 +219,9 @@ func (s *AIModelStore) UpdateWithName(userID, id, name string, enabled bool, api
 			"custom_api_url":    customAPIURL,
 			"custom_model_name": customModelName,
 			"updated_at":        time.Now().UTC(),
+		}
+		if len(reasoningEffort) > 0 {
+			updates["reasoning_effort"] = reasoningEffort[0]
 		}
 		if strings.TrimSpace(name) != "" {
 			updates["name"] = strings.TrimSpace(name)
@@ -236,6 +243,9 @@ func (s *AIModelStore) UpdateWithName(userID, id, name string, enabled bool, api
 			"custom_api_url":    customAPIURL,
 			"custom_model_name": customModelName,
 			"updated_at":        time.Now().UTC(),
+		}
+		if len(reasoningEffort) > 0 {
+			updates["reasoning_effort"] = reasoningEffort[0]
 		}
 		if strings.TrimSpace(name) != "" {
 			updates["name"] = strings.TrimSpace(name)
@@ -292,6 +302,9 @@ func (s *AIModelStore) UpdateWithName(userID, id, name string, enabled bool, api
 		APIKey:          crypto.EncryptedString(apiKey),
 		CustomAPIURL:    customAPIURL,
 		CustomModelName: customModelName,
+	}
+	if len(reasoningEffort) > 0 {
+		newModel.ReasoningEffort = reasoningEffort[0]
 	}
 	return s.db.Create(newModel).Error
 }

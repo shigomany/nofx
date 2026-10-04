@@ -45,12 +45,15 @@ export const configApi = {
     return result.data
   },
 
-  async testCodex(model: string): Promise<{ ok: true; response: string }> {
+  async testCodex(
+    model: string,
+    effort: string
+  ): Promise<{ ok: true; response: string }> {
     const result = await httpClient.request<{ ok: true; response: string }>(
       '/api/codex/test',
       {
         method: 'POST',
-        data: { model },
+        data: { model, effort },
         timeout: 125000,
       }
     )

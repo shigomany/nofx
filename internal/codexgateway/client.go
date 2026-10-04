@@ -18,7 +18,91 @@ import (
 	"github.com/google/uuid"
 )
 
-const DefaultModel = "gpt-5.6-luna"
+const DefaultModel = "gpt-6.1-sol"
+
+const DefaultEffort = "low" // Preserve the behavior of previously saved configurations.
+
+type ReasoningEffort struct {
+	Effort      string `json:"reasoningEffort"`
+	Description string `json:"description,omitempty"`
+}
+
+type CatalogModel struct {
+	ID               string            `json:"id"`
+	Model            string            `json:"model"`
+	DisplayName      string            `json:"displayName"`
+	IsDefault        bool              `json:"isDefault"`
+	DefaultEffort    string            `json:"defaultReasoningEffort,omitempty"`
+	SupportedEfforts []ReasoningEffort `json:"supportedReasoningEfforts"`
+}
+
+type ModelCatalog struct {
+	Data []CatalogModel `json:"data"`
+}
+
+func NormalizeEffort(effort string) string {
+	if effort == "" {
+		return DefaultEffort
+	}
+	return effort
+}
+
+// ValidateEffort also rejects Codex's automatic-delegation mode: this gateway
+// deliberately disables tools and multi_agent.
+func ValidateEffort(model, effort string) error {
+	switch NormalizeEffort(effort) {
+	case "none":
+		if model == "gpt-6.1-sol" || model == "gpt-6-astra" {
+			return errors.New("This model does not support reasoning effort none")
+		}
+	case "low", "medium", "high", "xhigh", "max":
+	default:
+		return errors.New("Unsupported Codex reasoning effort")
+	}
+	return nil
+}
+
+func (c *Client) Models(ctx context.Context, profile string) (ModelCatalog, error) {
+	var result ModelCatalog
+	err := c.Request(ctx, http.MethodGet, profile, "models", nil, &result)
+	for i := range result.Data {
+		model := &result.Data[i]
+		id := model.Model
+		if id == "" {
+			id = model.ID
+		}
+		filtered := make([]ReasoningEffort, 0, len(model.SupportedEfforts))
+		for _, item := range model.SupportedEfforts {
+			if item.Effort != "" && ValidateEffort(id, item.Effort) == nil {
+				filtered = append(filtered, item)
+			}
+		}
+		model.SupportedEfforts = filtered
+	}
+	return result, err
+}
+
+func (c *Client) ValidateSelection(ctx context.Context, profile, model, effort string) error {
+	if err := ValidateEffort(model, effort); err != nil {
+		return err
+	}
+	catalog, err := c.Models(ctx, profile)
+	if err != nil {
+		return err
+	}
+	for _, entry := range catalog.Data {
+		if entry.Model != model && entry.ID != model {
+			continue
+		}
+		for _, item := range entry.SupportedEfforts {
+			if item.Effort == NormalizeEffort(effort) {
+				return nil
+			}
+		}
+		return errors.New("Requested reasoning effort is not available for this model")
+	}
+	return errors.New("Requested Codex model is not available for this account")
+}
 
 type Client struct {
 	URL   string
@@ -111,13 +195,16 @@ type Generation struct {
 	Usage map[string]any `json:"usage"`
 }
 
-func (c *Client) Generate(ctx context.Context, profile, model, system, user string, timeout time.Duration) (Generation, error) {
+func (c *Client) Generate(ctx context.Context, profile, model, system, user string, timeout time.Duration, effort string) (Generation, error) {
+	if err := ValidateEffort(model, effort); err != nil {
+		return Generation{}, err
+	}
 	if strings.TrimSpace(system) == "" {
 		system = "Follow the requested response format."
 	}
 	var result Generation
 	err := c.Request(ctx, http.MethodPost, profile, "generate", map[string]any{
-		"system": system, "user": user, "model": model, "effort": "low",
+		"system": system, "user": user, "model": model, "effort": NormalizeEffort(effort),
 		"timeout_seconds": timeout.Seconds(),
 		"output_schema": map[string]any{
 			"type": "object", "properties": map[string]any{"response": map[string]string{"type": "string"}},

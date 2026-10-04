@@ -140,7 +140,8 @@ export function SettingsPage() {
     modelId: string,
     apiKey: string,
     customApiUrl?: string,
-    customModelName?: string
+    customModelName?: string,
+    reasoningEffort?: string
   ) => {
     try {
       const existingModel = configuredModels.find((m) => m.id === modelId)
@@ -160,6 +161,7 @@ export function SettingsPage() {
                 apiKey,
                 customApiUrl: customApiUrl || '',
                 customModelName: customModelName || '',
+                reasoningEffort: reasoningEffort || 'low',
                 enabled: true,
               }
             : m
@@ -172,6 +174,7 @@ export function SettingsPage() {
             apiKey,
             customApiUrl: customApiUrl || '',
             customModelName: customModelName || '',
+            reasoningEffort: reasoningEffort || 'low',
             enabled: true,
           },
         ]
@@ -186,6 +189,7 @@ export function SettingsPage() {
               api_key: m.apiKey || '',
               custom_api_url: m.customApiUrl || '',
               custom_model_name: m.customModelName || '',
+              reasoning_effort: m.reasoningEffort || 'low',
             },
           ])
         ),
@@ -226,6 +230,7 @@ export function SettingsPage() {
               api_key: m.apiKey || '',
               custom_api_url: m.customApiUrl || '',
               custom_model_name: m.customModelName || '',
+              reasoning_effort: m.reasoningEffort || 'low',
             },
           ])
         ),

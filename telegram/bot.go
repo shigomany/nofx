@@ -275,6 +275,7 @@ func newLLMClient(st *store.Store, userID string) mcp.AIClient {
 			if apiKey != "" {
 				client := clientForProvider(model.Provider)
 				client.SetAPIKey(apiKey, model.CustomAPIURL, model.CustomModelName)
+				mcp.ConfigureReasoningEffort(client, model.ReasoningEffort)
 				if isUSDCProvider(model.Provider) {
 					logger.Infof("Telegram agent: provider=%s (USDC payment) user=%s", model.Provider, userID)
 				} else {
@@ -291,6 +292,7 @@ func newLLMClient(st *store.Store, userID string) mcp.AIClient {
 		if apiKey != "" {
 			client := clientForProvider(model.Provider)
 			client.SetAPIKey(apiKey, model.CustomAPIURL, model.CustomModelName)
+			mcp.ConfigureReasoningEffort(client, model.ReasoningEffort)
 			if isUSDCProvider(model.Provider) {
 				logger.Infof("Telegram agent: provider=%s (USDC payment) user=%s", model.Provider, userID)
 			} else {

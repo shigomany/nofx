@@ -27,7 +27,7 @@ def _load_service_token(explicit: str | None) -> str:
 class GenerateRequest(BaseModel):
     system: str = Field(min_length=1, max_length=100_000)
     user: str = Field(min_length=1, max_length=500_000)
-    model: str = Field(default="gpt-5.6-luna", min_length=1, max_length=128)
+    model: str = Field(default="gpt-6.1-sol", min_length=1, max_length=128)
     effort: str = Field(default="low", min_length=1, max_length=32)
     output_schema: dict[str, Any]
     timeout_seconds: float = Field(default=35, ge=1, le=120)

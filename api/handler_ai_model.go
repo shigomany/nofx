@@ -35,6 +35,7 @@ type SafeModelConfig struct {
 	HasAPIKey       bool   `json:"has_api_key"`
 	CustomAPIURL    string `json:"customApiUrl"`    // Custom API URL (usually not sensitive)
 	CustomModelName string `json:"customModelName"` // Custom model name (not sensitive)
+	ReasoningEffort string `json:"reasoningEffort"`
 	WalletAddress   string `json:"walletAddress,omitempty"`
 	BalanceUSDC     string `json:"balanceUsdc,omitempty"`
 }
@@ -44,10 +45,11 @@ type SafeModelConfig struct {
 // guaranteed to stay in sync with this shape — a mismatch there is what let
 // plaintext credentials reach the logs previously.
 type ModelConfigUpdate struct {
-	Enabled         bool   `json:"enabled"`
-	APIKey          string `json:"api_key"`
-	CustomAPIURL    string `json:"custom_api_url"`
-	CustomModelName string `json:"custom_model_name"`
+	Enabled         bool    `json:"enabled"`
+	APIKey          string  `json:"api_key"`
+	CustomAPIURL    string  `json:"custom_api_url"`
+	CustomModelName string  `json:"custom_model_name"`
+	ReasoningEffort *string `json:"reasoning_effort,omitempty"`
 }
 
 type UpdateModelConfigRequest struct {
@@ -91,6 +93,10 @@ func (s *Server) handleGetModelConfigs(c *gin.Context) {
 			HasAPIKey:       model.APIKey != "",
 			CustomAPIURL:    model.CustomAPIURL,
 			CustomModelName: model.CustomModelName,
+			ReasoningEffort: model.ReasoningEffort,
+		}
+		if model.Provider == "codex" {
+			safeModel.ReasoningEffort = codexgateway.NormalizeEffort(model.ReasoningEffort)
 		}
 
 		if model.Provider == "claw402" {
@@ -200,6 +206,7 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 	tradersToReload := make(map[string]bool)
 	for modelID, modelData := range req.Models {
 		provider := modelID
+		existingEffort := ""
 		// Mirror the store's legacy ID parsing before applying provider guards.
 		// Otherwise a caller could bypass them with an arbitrary *_codex ID.
 		if parts := strings.Split(modelID, "_"); len(parts) >= 2 {
@@ -209,7 +216,11 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 			for _, model := range models {
 				if model.ID == modelID {
 					provider = model.Provider
+					existingEffort = model.ReasoningEffort
 					break
+				}
+				if model.Provider == modelID {
+					existingEffort = model.ReasoningEffort
 				}
 			}
 		}
@@ -218,6 +229,23 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "Codex uses its private gateway; custom API URLs are not supported"})
 				return
 			}
+			if strings.TrimSpace(modelData.CustomModelName) == "" {
+				modelData.CustomModelName = codexgateway.DefaultModel
+			}
+			if len(modelData.CustomModelName) > 100 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Codex model"})
+				return
+			}
+			effort := existingEffort
+			if modelData.ReasoningEffort != nil {
+				effort = *modelData.ReasoningEffort
+			}
+			effort = codexgateway.NormalizeEffort(effort)
+			if err := codexgateway.ValidateEffort(modelData.CustomModelName, effort); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			modelData.ReasoningEffort = &effort
 			if modelData.Enabled {
 				gateway, err := codexgateway.New()
 				if err != nil {
@@ -229,16 +257,13 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 					c.JSON(http.StatusConflict, gin.H{"error": "Connect your ChatGPT account before enabling Codex"})
 					return
 				}
+				if err := gateway.ValidateSelection(c.Request.Context(), codexgateway.ProfileID(userID), modelData.CustomModelName, effort); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
 			}
 			// A browser cannot supply another tenant's credential reference.
 			modelData.APIKey = codexgateway.ProfileID(userID)
-			if strings.TrimSpace(modelData.CustomModelName) == "" {
-				modelData.CustomModelName = codexgateway.DefaultModel
-			}
-			if len(modelData.CustomModelName) > 100 {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Codex model"})
-				return
-			}
 			req.Models[modelID] = modelData
 		}
 		if (provider == "zai" || modelID == userID+"_zai") && strings.Contains(modelData.CustomAPIURL, "/coding/") {
@@ -263,7 +288,11 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 			}
 		}
 
-		err := s.store.AIModel().Update(userID, modelID, modelData.Enabled, modelData.APIKey, modelData.CustomAPIURL, modelData.CustomModelName)
+		var effortUpdate []string
+		if modelData.ReasoningEffort != nil {
+			effortUpdate = []string{*modelData.ReasoningEffort}
+		}
+		err := s.store.AIModel().Update(userID, modelID, modelData.Enabled, modelData.APIKey, modelData.CustomAPIURL, modelData.CustomModelName, effortUpdate...)
 		if err != nil {
 			SafeInternalError(c, fmt.Sprintf("Update model %s", modelID), err)
 			return

@@ -24,6 +24,11 @@ func init() {
 type CodexClient struct {
 	*mcp.Client
 	timeout time.Duration
+	effort  string
+}
+
+func (c *CodexClient) SetReasoningEffort(effort string) {
+	c.effort = codexgateway.NormalizeEffort(effort)
 }
 
 func (c *CodexClient) SetAPIKey(profile, _ string, model string) {
@@ -49,7 +54,7 @@ func (c *CodexClient) generate(ctx context.Context, system, user, model string) 
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.timeout+3*time.Second)
 	defer cancel()
-	result, err := gateway.Generate(ctx, c.APIKey, model, system, user, c.timeout)
+	result, err := gateway.Generate(ctx, c.APIKey, model, system, user, c.timeout, c.effort)
 	if err != nil {
 		return "", err
 	}
