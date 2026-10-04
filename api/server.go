@@ -275,6 +275,12 @@ Body: {"show_in_competition":<bool>}`,
 			s.route(protected, "GET", "/ai-costs/summary", "Get AI cost summary (?period=today)", s.handleGetAICostsSummary)
 
 			// AI model configuration
+			s.route(protected, "POST", "/codex/connect", "Connect a ChatGPT subscription using device sign-in", s.handleCodexConnect)
+			s.route(protected, "GET", "/codex/status", "Read the current user's Codex connection status", s.handleCodexStatus)
+			s.route(protected, "GET", "/codex/models", "List models in the connected Codex catalog", s.handleCodexModels)
+			s.route(protected, "POST", "/codex/test", "Test a selected Codex model without trading", s.handleCodexTest)
+			s.route(protected, "POST", "/codex/cancel", "Cancel a pending Codex sign-in", s.handleCodexCancel)
+			s.route(protected, "POST", "/codex/disconnect", "Disconnect the current user's saved Codex subscription session", s.handleCodexDisconnect)
 			s.routeWithSchema(protected, "GET", "/models", "List AI model configs",
 				`Returns: [{"id":"<EXACT id — use this as ai_model_id when creating/updating a trader>","name":"<display name>","provider":"<short provider name — NOT a valid id>","enabled":<bool>}]
 CRITICAL: The "id" field (e.g. "abc123_deepseek") is what you must use for ai_model_id. The "provider" field ("deepseek") is NOT valid as an id.`,

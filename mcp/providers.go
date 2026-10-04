@@ -12,6 +12,8 @@ const (
 	ProviderGrok     = "grok"
 	ProviderKimi     = "kimi"
 	ProviderMiniMax  = "minimax"
+	ProviderCodex    = "codex"
+	ProviderZAI      = "zai"
 
 	ProviderClaw402 = "claw402"
 

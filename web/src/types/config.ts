@@ -11,6 +11,25 @@ export interface AIModel {
   balanceUsdc?: string
 }
 
+export interface CodexConnectResponse {
+  loginId: string
+  verificationUrl: string
+  userCode: string
+}
+
+export interface CodexConnectionStatus {
+  connected: boolean
+  status: 'pending' | 'connected' | 'failed' | 'cancelled' | 'unknown'
+  planType?: string
+}
+
+export interface CodexCatalogModel {
+  id: string
+  model?: string
+  displayName?: string
+  isDefault?: boolean
+}
+
 export interface TelegramConfig {
   token_masked: string // Masked token like "123456:ABC***XYZ"
   is_bound: boolean // Whether a user has sent /start

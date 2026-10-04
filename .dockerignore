@@ -38,6 +38,12 @@ decision_logs/
 
 # Config files (should be mounted)
 config.json
+.env
+.env.*
+secrets/
+data/
+*.db
+codex-profiles/
 
 # Web build artifacts (but include source for multi-stage build)
 web/node_modules/

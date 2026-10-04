@@ -192,6 +192,7 @@ func hasUsableAPIKey(model AIModel) bool {
 		"kimi":     "MOONSHOT_API_KEY",
 		"minimax":  "MINIMAX_API_KEY",
 		"qwen":     "DASHSCOPE_API_KEY",
+		"zai":      "ZAI_API_KEY",
 	}
 	envKey := envKeyByProvider[strings.ToLower(strings.TrimSpace(model.Provider))]
 	return envKey != "" && strings.TrimSpace(os.Getenv(envKey)) != ""

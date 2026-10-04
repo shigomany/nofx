@@ -1129,6 +1129,31 @@ export const translations = {
       invalidKeyChars: 'Contains invalid characters',
       testConnection: 'Test Connection',
       testingConnection: 'Testing...',
+      codexTitle: 'OpenAI Codex subscription',
+      codexDescription:
+        'Connect with the official device authorization page. NOFX never receives or stores your account credentials.',
+      codexConnect: 'Connect Codex',
+      codexReconnect: 'Reconnect Codex',
+      codexWaiting: 'Waiting for authorization…',
+      codexDeviceInstruction:
+        'Open the official authorization page and enter this one-time code:',
+      codexOpenAuthorization: 'Open authorization page',
+      codexModel: 'Codex model',
+      codexSave: 'Save Codex',
+      codexDisconnect: 'Disconnect Codex account',
+      codexDisconnecting: 'Disconnecting…',
+      codexDisconnected: 'Codex account disconnected.',
+      codexDisconnectFailed:
+        'Could not disconnect Codex. Stop all running Codex traders first, then try again.',
+      codexConnected: 'Connected',
+      codexConnectionFailed:
+        'Connection failed. Start a new sign-in to try again.',
+      codexStatusFailed: 'Could not check connection status. Please try again.',
+      codexStartFailed: 'Could not start Codex sign-in. Please try again.',
+      codexTestFailed:
+        'Connection test failed. Please reconnect and try again.',
+      zaiBillingNotice:
+        'Z.ai access here uses the separately billed standard API. It does not use Coding Plan quota, and Coding Plan endpoints are not supported.',
     },
 
     // ExchangeConfigModal
@@ -2293,6 +2318,27 @@ export const translations = {
       invalidKeyChars: '包含非法字符',
       testConnection: '测试连接',
       testingConnection: '测试中...',
+      codexTitle: 'OpenAI Codex 订阅',
+      codexDescription:
+        '通过官方设备授权页面连接。NOFX 不会接收或存储您的账户凭据。',
+      codexConnect: '连接 Codex',
+      codexReconnect: '重新连接 Codex',
+      codexWaiting: '等待授权…',
+      codexDeviceInstruction: '打开官方授权页面并输入此一次性代码：',
+      codexOpenAuthorization: '打开授权页面',
+      codexModel: 'Codex 模型',
+      codexSave: '保存 Codex',
+      codexDisconnect: '断开 Codex 账户',
+      codexDisconnecting: '正在断开…',
+      codexDisconnected: 'Codex 账户已断开。',
+      codexDisconnectFailed: '无法断开 Codex。请先停止所有运行中的 Codex 交易员，然后重试。',
+      codexConnected: '已连接',
+      codexConnectionFailed: '连接失败。请重新开始登录。',
+      codexStatusFailed: '无法检查连接状态。请重试。',
+      codexStartFailed: '无法开始 Codex 登录。请重试。',
+      codexTestFailed: '连接测试失败。请重新连接后重试。',
+      zaiBillingNotice:
+        '此处的 Z.ai 使用单独计费的标准 API，不使用 Coding Plan 配额，也不支持 Coding Plan 端点。',
     },
 
     exchangeConfig: {
@@ -3415,6 +3461,30 @@ export const translations = {
       invalidKeyChars: 'Mengandung karakter tidak valid',
       testConnection: 'Tes Koneksi',
       testingConnection: 'Menguji...',
+      codexTitle: 'Langganan OpenAI Codex',
+      codexDescription:
+        'Hubungkan melalui halaman otorisasi perangkat resmi. NOFX tidak menerima atau menyimpan kredensial akun Anda.',
+      codexConnect: 'Hubungkan Codex',
+      codexReconnect: 'Hubungkan ulang Codex',
+      codexWaiting: 'Menunggu otorisasi…',
+      codexDeviceInstruction:
+        'Buka halaman otorisasi resmi dan masukkan kode sekali pakai ini:',
+      codexOpenAuthorization: 'Buka halaman otorisasi',
+      codexModel: 'Model Codex',
+      codexSave: 'Simpan Codex',
+      codexDisconnect: 'Putuskan akun Codex',
+      codexDisconnecting: 'Memutuskan…',
+      codexDisconnected: 'Akun Codex telah diputuskan.',
+      codexDisconnectFailed:
+        'Tidak dapat memutuskan Codex. Hentikan semua trader Codex yang berjalan, lalu coba lagi.',
+      codexConnected: 'Terhubung',
+      codexConnectionFailed:
+        'Koneksi gagal. Mulai login baru untuk mencoba lagi.',
+      codexStatusFailed: 'Tidak dapat memeriksa status koneksi. Coba lagi.',
+      codexStartFailed: 'Tidak dapat memulai login Codex. Coba lagi.',
+      codexTestFailed: 'Tes koneksi gagal. Hubungkan ulang lalu coba lagi.',
+      zaiBillingNotice:
+        'Akses Z.ai di sini memakai API standar dengan tagihan terpisah. Ini tidak memakai kuota Coding Plan, dan endpoint Coding Plan tidak didukung.',
     },
 
     exchangeConfig: {

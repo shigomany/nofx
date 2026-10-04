@@ -1,0 +1,47 @@
+# Optional provider extension: docker compose -f docker-compose.yml
+# -f docker-compose.providers.yml up -d --build
+# Create secrets/codex-gateway-token before starting; never commit that file.
+services:
+  nofx:
+    environment:
+      CODEX_GATEWAY_URL: http://codex-gateway:8010
+      CODEX_GATEWAY_SERVICE_TOKEN_FILE: /run/secrets/codex_gateway_token
+    secrets:
+      - codex_gateway_token
+    depends_on:
+      codex-gateway:
+        condition: service_healthy
+
+  codex-gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.codex-gateway
+    restart: unless-stopped
+    environment:
+      CODEX_GATEWAY_SERVICE_TOKEN_FILE: /run/secrets/codex_gateway_token
+      CODEX_PROFILES_ROOT: /var/lib/codex-profiles
+    volumes:
+      - nofx-codex-profiles:/var/lib/codex-profiles
+    secrets:
+      - codex_gateway_token
+    networks:
+      - nofx-network
+    healthcheck:
+      test: [CMD, /app/.venv/bin/python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 2g
+
+volumes:
+  nofx-codex-profiles:
+
+secrets:
+  codex_gateway_token:
+    file: ./secrets/codex-gateway-token

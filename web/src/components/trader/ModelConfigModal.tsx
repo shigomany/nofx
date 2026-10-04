@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Trash2, Brain, ExternalLink } from 'lucide-react'
 import type { AIModel } from '../../types'
@@ -7,6 +7,7 @@ import { t } from '../../i18n/translations'
 import { getModelIcon, getModelColor } from '../common/ModelIcons'
 import { ModelStepIndicator } from './ModelStepIndicator'
 import { ModelCard } from './ModelCard'
+import { api } from '../../lib/api'
 import {
   CLAW402_MODELS,
   DEFAULT_CLAW402_MODEL,
@@ -71,7 +72,18 @@ export function ModelConfigModal({
     }
   }, [editingModelId, selectedModel])
 
+  useEffect(() => {
+    if (selectedModel?.provider !== 'zai') return
+    if (!baseUrl) setBaseUrl('https://api.z.ai/api/paas/v4')
+    if (!modelName) setModelName('glm-5.3')
+  }, [selectedModel, baseUrl, modelName])
+
   const handleSelectModel = (modelId: string) => {
+    const model = availableModels.find((item) => item.id === modelId)
+    if (model?.provider === 'zai') {
+      setBaseUrl('https://api.z.ai/api/paas/v4')
+      setModelName('glm-5.3')
+    }
     setSelectedModelId(modelId)
     setCurrentStep(1)
   }
@@ -90,10 +102,12 @@ export function ModelConfigModal({
     if (!selectedModelId) return
     // Editing with a stored key: an empty key means "keep the existing one"
     // (the backend preserves the stored key when api_key is empty).
-    if (!apiKey.trim() && !(editingModelId && hasExistingKey)) return
+    const isCodex = selectedModel?.provider === 'codex'
+    if (!isCodex && !apiKey.trim() && !(editingModelId && hasExistingKey))
+      return
     onSave(
       selectedModelId,
-      apiKey.trim(),
+      isCodex ? '' : apiKey.trim(),
       baseUrl.trim() || undefined,
       modelName.trim() || undefined
     )
@@ -213,7 +227,21 @@ export function ModelConfigModal({
           {/* Step 1: Configure — Standard Providers (non-claw402) */}
           {(currentStep === 1 || editingModelId) &&
             selectedModel &&
+            selectedModel.provider === 'codex' && (
+              <CodexConfigForm
+                modelName={modelName}
+                isConfigured={hasExistingKey}
+                onModelNameChange={setModelName}
+                onBack={handleBack}
+                onSave={() => onSave(selectedModelId, '', '', modelName.trim())}
+                language={language}
+              />
+            )}
+
+          {(currentStep === 1 || editingModelId) &&
+            selectedModel &&
             selectedModel.provider !== 'claw402' &&
+            selectedModel.provider !== 'codex' &&
             selectedModel.id !== 'claw402' && (
               <StandardProviderConfigForm
                 selectedModel={selectedModel}
@@ -1151,6 +1179,350 @@ function Claw402ConfigForm({
   )
 }
 
+function CodexConfigForm({
+  modelName,
+  isConfigured,
+  onModelNameChange,
+  onBack,
+  onSave,
+  language,
+}: {
+  modelName: string
+  isConfigured: boolean
+  onModelNameChange: (value: string) => void
+  onBack: () => void
+  onSave: () => void
+  language: Language
+}) {
+  const [verificationUrl, setVerificationUrl] = useState('')
+  const [userCode, setUserCode] = useState('')
+  const [status, setStatus] = useState<
+    'idle' | 'pending' | 'connected' | 'failed'
+  >('idle')
+  const [models, setModels] = useState<
+    Array<{ id: string; label: string; isDefault?: boolean }>
+  >([])
+  const [message, setMessage] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const [disconnectError, setDisconnectError] = useState('')
+  const activeLoginRef = useRef('')
+  const pollTimerRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
+
+  const stopPolling = () => {
+    if (pollTimerRef.current !== null) {
+      window.clearTimeout(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }
+
+  const cancelActiveLogin = async () => {
+    stopPolling()
+    const activeLogin = activeLoginRef.current
+    activeLoginRef.current = ''
+    if (activeLogin) {
+      await api.cancelCodex(activeLogin).catch(() => undefined)
+    }
+  }
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      stopPolling()
+      const activeLogin = activeLoginRef.current
+      activeLoginRef.current = ''
+      if (activeLogin) void api.cancelCodex(activeLogin).catch(() => undefined)
+    }
+  }, [])
+
+  const loadModels = async () => {
+    const catalog = await api.getCodexModels()
+    if (!mountedRef.current) return
+    const nextModels = catalog.data.map((item) => ({
+      id: item.model || item.id,
+      label: item.displayName || item.model || item.id,
+      isDefault: item.isDefault,
+    }))
+    setModels(nextModels)
+    if (!modelName || !nextModels.some((item) => item.id === modelName)) {
+      onModelNameChange(
+        nextModels.find((item) => item.isDefault)?.id ||
+          nextModels.find((item) => item.id === 'gpt-5.6-luna')?.id ||
+          nextModels[0]?.id ||
+          'gpt-5.6-luna'
+      )
+    }
+  }
+
+  useEffect(() => {
+    if (!isConfigured) return
+    let active = true
+    void api.getCodexStatus()
+      .then(async (result) => {
+        if (!active || !result.connected) return
+        await loadModels()
+        if (!active) return
+        setStatus('connected')
+        const connectedLabel = t('modelConfig.codexConnected', language)
+        setMessage(result.planType ? `${connectedLabel} (${result.planType})` : connectedLabel)
+      })
+      .catch(() => {
+        if (!active) return
+        setStatus('idle')
+      })
+    return () => {
+      active = false
+    }
+  }, [isConfigured])
+
+  const pollStatus = async (currentLoginId: string) => {
+    if (activeLoginRef.current !== currentLoginId) return
+    try {
+      const result = await api.getCodexStatus(currentLoginId)
+      if (activeLoginRef.current !== currentLoginId) return
+      if (result.connected || result.status === 'connected') {
+        activeLoginRef.current = ''
+        setStatus('connected')
+        const connectedLabel = t('modelConfig.codexConnected', language)
+        setMessage(
+          result.planType
+            ? `${connectedLabel} (${result.planType})`
+            : connectedLabel
+        )
+        await loadModels()
+        return
+      }
+      if (
+        result.status === 'failed' ||
+        result.status === 'cancelled' ||
+        result.status === 'unknown'
+      ) {
+        activeLoginRef.current = ''
+        setStatus('failed')
+        setMessage(t('modelConfig.codexConnectionFailed', language))
+        return
+      }
+      pollTimerRef.current = window.setTimeout(
+        () => void pollStatus(currentLoginId),
+        1500
+      )
+    } catch {
+      if (activeLoginRef.current === currentLoginId) {
+        setStatus('failed')
+        setMessage(t('modelConfig.codexStatusFailed', language))
+      }
+    }
+  }
+
+  const connect = async () => {
+    await cancelActiveLogin()
+    setMessage('')
+    setStatus('pending')
+    try {
+      const result = await api.connectCodex()
+      if (!mountedRef.current) {
+        await api.cancelCodex(result.loginId).catch(() => undefined)
+        return
+      }
+      activeLoginRef.current = result.loginId
+      setVerificationUrl(result.verificationUrl)
+      setUserCode(result.userCode)
+      void pollStatus(result.loginId)
+    } catch {
+      setStatus('failed')
+      setMessage(t('modelConfig.codexStartFailed', language))
+    }
+  }
+
+  const testConnection = async () => {
+    if (!modelName) return
+    setTesting(true)
+    setMessage('')
+    try {
+      const result = await api.testCodex(modelName)
+      if (!mountedRef.current) return
+      setMessage(result.response || 'Connection test succeeded.')
+    } catch {
+      if (mountedRef.current) {
+        setMessage(t('modelConfig.codexTestFailed', language))
+      }
+    } finally {
+      if (mountedRef.current) setTesting(false)
+    }
+  }
+
+  const disconnect = async () => {
+    setDisconnecting(true)
+    setDisconnectError('')
+    try {
+      await api.disconnectCodex()
+      if (!mountedRef.current) return
+      setStatus('idle')
+      setModels([])
+      onModelNameChange('')
+      setMessage(t('modelConfig.codexDisconnected', language))
+    } catch {
+      if (mountedRef.current) {
+        setDisconnectError(t('modelConfig.codexDisconnectFailed', language))
+      }
+    } finally {
+      if (mountedRef.current) setDisconnecting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-5" data-testid="codex-config-form">
+      <div
+        className="p-4 rounded-xl"
+        style={{
+          background: '#F1ECE2',
+          border: '1px solid rgba(26,24,19,0.14)',
+        }}
+      >
+        <div className="font-semibold text-lg" style={{ color: '#1A1813' }}>
+          {t('modelConfig.codexTitle', language)}
+        </div>
+        <div className="text-sm mt-1" style={{ color: '#6F695F' }}>
+          {t('modelConfig.codexDescription', language)}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => void connect()}
+        disabled={status === 'pending'}
+        className="w-full px-4 py-3 rounded-xl font-bold disabled:opacity-50"
+        style={{ background: '#1A1813', color: '#fff' }}
+      >
+        {status === 'pending'
+          ? t('modelConfig.codexWaiting', language)
+          : status === 'connected'
+            ? t('modelConfig.codexReconnect', language)
+            : t('modelConfig.codexConnect', language)}
+      </button>
+
+      {status === 'pending' && verificationUrl && (
+        <div
+          className="p-4 rounded-xl space-y-3"
+          style={{ border: '1px solid rgba(224,72,59,0.3)' }}
+        >
+          <div className="text-sm" style={{ color: '#1A1813' }}>
+            {t('modelConfig.codexDeviceInstruction', language)}
+          </div>
+          <div
+            className="text-2xl font-mono font-bold tracking-widest"
+            data-testid="codex-user-code"
+          >
+            {userCode}
+          </div>
+          <a
+            href={verificationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm font-semibold"
+            style={{ color: '#E0483B' }}
+          >
+            {t('modelConfig.codexOpenAuthorization', language)}{' '}
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      )}
+
+      {status === 'connected' && (
+        <div className="space-y-4">
+          <div
+            role="status"
+            className="text-sm font-semibold"
+            style={{ color: '#2E8B57' }}
+          >
+            {message || t('modelConfig.codexConnected', language)}
+          </div>
+          <label
+            className="block text-sm font-semibold"
+            style={{ color: '#1A1813' }}
+          >
+            {t('modelConfig.codexModel', language)}
+            <select
+              aria-label={t('modelConfig.codexModel', language)}
+              value={modelName}
+              onChange={(event) => onModelNameChange(event.target.value)}
+              className="mt-2 w-full px-4 py-3 rounded-xl"
+              style={{
+                background: '#F1ECE2',
+                border: '1px solid rgba(26,24,19,0.14)',
+              }}
+            >
+              {models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={() => void testConnection()}
+            disabled={!modelName || testing}
+            className="w-full px-4 py-3 rounded-xl font-semibold disabled:opacity-50"
+            style={{ border: '1px solid rgba(26,24,19,0.2)' }}
+          >
+            {testing
+              ? t('modelConfig.testingConnection', language)
+              : t('modelConfig.testConnection', language)}
+          </button>
+        </div>
+      )}
+
+      {status !== 'connected' && message && (
+        <div role="alert" className="text-sm" style={{ color: '#D6433A' }}>
+          {message}
+        </div>
+      )}
+
+      {disconnectError && (
+        <div role="alert" className="text-sm" style={{ color: '#D6433A' }}>
+          {disconnectError}
+        </div>
+      )}
+
+      <div className="flex gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="px-4 py-3 rounded-xl text-sm font-semibold"
+          style={{ border: '1px solid rgba(26,24,19,0.14)' }}
+        >
+          {t('modelConfig.back', language)}
+        </button>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={status !== 'connected' || !modelName}
+          className="flex-1 px-4 py-3 rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ background: '#E0483B', color: '#fff' }}
+        >
+          {t('modelConfig.codexSave', language)}
+        </button>
+      </div>
+      {status === 'connected' && (
+        <button
+          type="button"
+          onClick={() => void disconnect()}
+          disabled={disconnecting}
+          className="w-full px-4 py-2 rounded-xl text-sm font-semibold disabled:opacity-50"
+          style={{ color: '#D6433A', border: '1px solid rgba(214,67,58,0.3)' }}
+        >
+          {disconnecting
+            ? t('modelConfig.codexDisconnecting', language)
+            : t('modelConfig.codexDisconnect', language)}
+        </button>
+      )}
+    </div>
+  )
+}
+
 function StandardProviderConfigForm({
   selectedModel,
   apiKey,
@@ -1240,6 +1612,20 @@ function StandardProviderConfigForm({
               {t('kimiApiNote', language)}
             </div>
           </div>
+        </div>
+      )}
+
+      {selectedModel.provider === 'zai' && (
+        <div
+          className="p-4 rounded-xl text-sm"
+          role="note"
+          style={{
+            background: 'rgba(224, 72, 59, 0.08)',
+            border: '1px solid rgba(224, 72, 59, 0.25)',
+            color: '#8A3029',
+          }}
+        >
+          {t('modelConfig.zaiBillingNotice', language)}
         </div>
       )}
 

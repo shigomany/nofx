@@ -7,10 +7,77 @@ import type {
   CreateExchangeRequest,
   BeginnerOnboardingResponse,
   CurrentBeginnerWalletResponse,
+  CodexConnectResponse,
+  CodexConnectionStatus,
+  CodexCatalogModel,
 } from '../../types'
 import { API_BASE, httpClient, CryptoService } from './helpers'
 
 export const configApi = {
+  async connectCodex(): Promise<CodexConnectResponse> {
+    const result =
+      await httpClient.post<CodexConnectResponse>('/api/codex/connect')
+    if (!result.success || !result.data)
+      throw new Error(result.message || 'Failed to start Codex connection')
+    return result.data
+  },
+
+  async getCodexStatus(loginId?: string): Promise<CodexConnectionStatus> {
+    const result = await httpClient.get<CodexConnectionStatus>(
+      '/api/codex/status',
+      loginId ? { login_id: loginId } : undefined
+    )
+    if (!result.success || !result.data)
+      throw new Error(result.message || 'Failed to check Codex connection')
+    return result.data
+  },
+
+  async getCodexModels(): Promise<{
+    data: CodexCatalogModel[]
+    nextCursor?: string
+  }> {
+    const result = await httpClient.get<{
+      data: CodexCatalogModel[]
+      nextCursor?: string
+    }>('/api/codex/models')
+    if (!result.success || !result.data)
+      throw new Error(result.message || 'Failed to load Codex models')
+    return result.data
+  },
+
+  async testCodex(model: string): Promise<{ ok: true; response: string }> {
+    const result = await httpClient.request<{ ok: true; response: string }>(
+      '/api/codex/test',
+      {
+        method: 'POST',
+        data: { model },
+        timeout: 125000,
+      }
+    )
+    if (!result.success || !result.data?.ok)
+      throw new Error(result.message || 'Codex connection test failed')
+    return result.data
+  },
+
+  async cancelCodex(loginId: string): Promise<void> {
+    const result = await httpClient.post<{ cancelled: true }>(
+      '/api/codex/cancel',
+      {
+        login_id: loginId,
+      }
+    )
+    if (!result.success)
+      throw new Error(result.message || 'Failed to cancel Codex connection')
+  },
+
+  async disconnectCodex(): Promise<void> {
+    const result = await httpClient.post<{ disconnected: true }>(
+      '/api/codex/disconnect'
+    )
+    if (!result.success || !result.data?.disconnected)
+      throw new Error(result.message || 'Failed to disconnect Codex')
+  },
+
   async getModelConfigs(): Promise<AIModel[]> {
     const result = await httpClient.get<AIModel[]>(`${API_BASE}/models`)
     if (!result.success) throw new Error('Failed to fetch model configs')

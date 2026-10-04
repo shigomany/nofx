@@ -130,6 +130,11 @@ export const CLAW402_MODELS: Claw402Model[] = [
 
 // AI Provider configuration - default models and API links
 export const AI_PROVIDER_CONFIG: Record<string, AIProviderConfig> = {
+  zai: {
+    defaultModel: 'glm-5.3',
+    apiUrl: 'https://api.z.ai/api/paas/v4',
+    apiName: 'Z.ai',
+  },
   claw402: {
     defaultModel: DEFAULT_CLAW402_MODEL,
     apiUrl: 'https://claw402.ai',

@@ -8,6 +8,7 @@ import (
 
 	"nofx/config"
 	"nofx/crypto"
+	"nofx/internal/codexgateway"
 	"nofx/logger"
 	"nofx/security"
 	"nofx/store"
@@ -198,6 +199,52 @@ func (s *Server) handleUpdateModelConfigs(c *gin.Context) {
 
 	tradersToReload := make(map[string]bool)
 	for modelID, modelData := range req.Models {
+		provider := modelID
+		// Mirror the store's legacy ID parsing before applying provider guards.
+		// Otherwise a caller could bypass them with an arbitrary *_codex ID.
+		if parts := strings.Split(modelID, "_"); len(parts) >= 2 {
+			provider = parts[len(parts)-1]
+		}
+		if models, err := s.store.AIModel().List(userID); err == nil {
+			for _, model := range models {
+				if model.ID == modelID {
+					provider = model.Provider
+					break
+				}
+			}
+		}
+		if provider == "codex" || modelID == userID+"_codex" {
+			if modelData.CustomAPIURL != "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Codex uses its private gateway; custom API URLs are not supported"})
+				return
+			}
+			if modelData.Enabled {
+				gateway, err := codexgateway.New()
+				if err != nil {
+					c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
+					return
+				}
+				account, err := gateway.Account(c.Request.Context(), codexgateway.ProfileID(userID))
+				if err != nil || !account.Connected() {
+					c.JSON(http.StatusConflict, gin.H{"error": "Connect your ChatGPT account before enabling Codex"})
+					return
+				}
+			}
+			// A browser cannot supply another tenant's credential reference.
+			modelData.APIKey = codexgateway.ProfileID(userID)
+			if strings.TrimSpace(modelData.CustomModelName) == "" {
+				modelData.CustomModelName = codexgateway.DefaultModel
+			}
+			if len(modelData.CustomModelName) > 100 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Codex model"})
+				return
+			}
+			req.Models[modelID] = modelData
+		}
+		if (provider == "zai" || modelID == userID+"_zai") && strings.Contains(modelData.CustomAPIURL, "/coding/") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Z.ai Coding Plan is limited to supported tools. NOFX uses the separately billed standard API."})
+			return
+		}
 		// SSRF protection: validate custom_api_url before storing
 		if modelData.CustomAPIURL != "" {
 			cleanURL := strings.TrimSuffix(modelData.CustomAPIURL, "#")
@@ -245,6 +292,8 @@ func (s *Server) handleGetSupportedModels(c *gin.Context) {
 	// Return static list of supported AI models with default versions
 	supportedModels := []map[string]interface{}{
 		{"id": "claw402", "name": "Claw402 (Base USDC)", "provider": "claw402", "defaultModel": "gpt-5.6"},
+		{"id": "codex", "name": "OpenAI Codex (subscription)", "provider": "codex", "defaultModel": codexgateway.DefaultModel},
+		{"id": "zai", "name": "Z.ai GLM (API)", "provider": "zai", "defaultModel": "glm-5.3"},
 	}
 
 	c.JSON(http.StatusOK, supportedModels)

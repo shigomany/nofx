@@ -202,6 +202,10 @@ export function SettingsPage() {
 
   const handleDeleteModel = async (modelId: string) => {
     try {
+      const targetModel = configuredModels.find((model) => model.id === modelId)
+      if (targetModel?.provider === 'codex') {
+        await api.disconnectCodex()
+      }
       const updatedModels = configuredModels.map((m) =>
         m.id === modelId
           ? {
